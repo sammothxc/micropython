@@ -215,7 +215,7 @@ typedef struct _rule_stack_t {
 } rule_stack_t;
 
 typedef struct _mp_parse_chunk_t {
-    size_t alloc;
+    mp_uint_t alloc; /* keep data four-byte aligned for parse-node tags */
     union {
         size_t used;
         struct _mp_parse_chunk_t *next;

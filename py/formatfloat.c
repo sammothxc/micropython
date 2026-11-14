@@ -64,17 +64,17 @@
 #define FLT_SIGN_MASK   0x80000000
 
 static inline int fp_signbit(float x) {
-    mp_float_union_t fb = {x};
+    mp_float_union_t fb; fb.f = x;
     return fb.i & FLT_SIGN_MASK;
 }
 #define fp_isnan(x) isnan(x)
 #define fp_isinf(x) isinf(x)
 static inline int fp_iszero(float x) {
-    mp_float_union_t fb = {x};
+    mp_float_union_t fb; fb.f = x;
     return fb.i == 0;
 }
 static inline int fp_isless1(float x) {
-    mp_float_union_t fb = {x};
+    mp_float_union_t fb; fb.f = x;
     return fb.i < 0x3f800000;
 }
 
@@ -94,7 +94,7 @@ static inline int fp_isless1(float x) {
 #endif // MICROPY_FLOAT_IMPL == MICROPY_FLOAT_IMPL_FLOAT/DOUBLE
 
 static inline int fp_expval(FPTYPE x) {
-    mp_float_union_t fb = {x};
+    mp_float_union_t fb; fb.f = x;
     return (int)((fb.i >> MP_FLOAT_FRAC_BITS) & (~(0xFFFFFFFF << MP_FLOAT_EXP_BITS))) - MP_FLOAT_EXP_OFFSET;
 }
 

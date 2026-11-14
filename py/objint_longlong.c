@@ -242,6 +242,12 @@ mp_obj_t mp_obj_int_binary_op(mp_binary_op_t op, mp_obj_t lhs_in, mp_obj_t rhs_i
             return MP_OBJ_NULL; // op not supported
     }
 
+;
+;
+;
+;
+;
+;
 zero_division:
     mp_raise_msg(&mp_type_ZeroDivisionError, MP_ERROR_TEXT("divide by zero"));
 }

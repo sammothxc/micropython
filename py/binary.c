@@ -196,7 +196,7 @@ static float mp_decode_half_float(uint16_t hf) {
         ++e;
     }
 
-    fpu.i = ((hf & 0x8000) << 16) | (e << 23) | (m << 13);
+    fpu.i = (((uint32_t)hf & 0x8000UL) << 16) | ((uint32_t)e << 23) | ((uint32_t)m << 13);
     return fpu.f;
 }
 
@@ -204,7 +204,7 @@ static uint16_t mp_encode_half_float(float x) {
     union {
         uint32_t i;
         float f;
-    } fpu = { .f = x };
+    } fpu; fpu.f = x;
 
     uint16_t m = (fpu.i >> 13) & 0x3ff;
     if (fpu.i & (1 << 12)) {
@@ -346,13 +346,13 @@ mp_obj_t mp_binary_get_val(char struct_type, char val_type, byte *p_base, byte *
         union {
             uint32_t i;
             float f;
-        } fpu = {val};
+        } fpu; fpu.i = val;
         return mp_obj_new_float_from_f(fpu.f);
     } else if (val_type == 'd') {
         union {
             uint64_t i;
             double f;
-        } fpu = {val};
+        } fpu; fpu.i = val;
         return mp_obj_new_float_from_d(fpu.f);
     #endif
     } else if (is_signed(val_type)) {

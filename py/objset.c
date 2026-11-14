@@ -452,7 +452,7 @@ static mp_obj_t set_unary_op(mp_unary_op_t op, mp_obj_t self_in) {
 }
 
 static mp_obj_t set_binary_op(mp_binary_op_t op, mp_obj_t lhs, mp_obj_t rhs) {
-    mp_obj_t args[] = {lhs, rhs};
+    mp_obj_t args[2]; args[0] = lhs; args[1] = rhs;
     #if MICROPY_PY_BUILTINS_FROZENSET
     bool update = mp_obj_is_type(lhs, &mp_type_set);
     #else

@@ -365,6 +365,7 @@ mp_obj_t mp_unary_op(mp_unary_op_t op, mp_obj_t arg) {
 }
 
 mp_obj_t MICROPY_WRAP_MP_BINARY_OP(mp_binary_op)(mp_binary_op_t op, mp_obj_t lhs, mp_obj_t rhs) {
+    const mp_obj_type_t *type;
     DEBUG_OP_printf("binary " UINT_FMT " %q %p %p\n", op, mp_binary_op_method_name[op], lhs, rhs);
 
     // TODO correctly distinguish inplace operators for mutable objects
@@ -625,7 +626,13 @@ mp_obj_t MICROPY_WRAP_MP_BINARY_OP(mp_binary_op)(mp_binary_op_t op, mp_obj_t lhs
     }
 
     // generic binary_op supplied by type
-    const mp_obj_type_t *type;
+    /* declaration moved to function entry for Watcom */
+;
+;
+;
+;
+;
+;
 generic_binary_op:
     type = mp_obj_get_type(lhs);
     if (MP_OBJ_TYPE_HAS_SLOT(type, binary_op)) {
@@ -674,6 +681,12 @@ generic_binary_op:
         return mp_const_false;
     }
 
+;
+;
+;
+;
+;
+;
 unsupported_op:
     #if MICROPY_ERROR_REPORTING <= MICROPY_ERROR_REPORTING_TERSE
     mp_raise_TypeError(MP_ERROR_TEXT("unsupported type for operator"));
@@ -683,6 +696,12 @@ unsupported_op:
         mp_binary_op_method_name[op], mp_obj_get_type_str(lhs), mp_obj_get_type_str(rhs));
     #endif
 
+;
+;
+;
+;
+;
+;
 zero_division:
     mp_raise_msg(&mp_type_ZeroDivisionError, MP_ERROR_TEXT("divide by zero"));
 }
@@ -977,12 +996,24 @@ void mp_unpack_sequence(mp_obj_t seq_in, size_t num, mp_obj_t *items) {
     }
     return;
 
+;
+;
+;
+;
+;
+;
 too_short:
     #if MICROPY_ERROR_REPORTING <= MICROPY_ERROR_REPORTING_TERSE
     mp_raise_ValueError(MP_ERROR_TEXT("wrong number of values to unpack"));
     #else
     mp_raise_msg_varg(&mp_type_ValueError, MP_ERROR_TEXT("need more than %d values to unpack"), (int)seq_len);
     #endif
+;
+;
+;
+;
+;
+;
 too_long:
     #if MICROPY_ERROR_REPORTING <= MICROPY_ERROR_REPORTING_TERSE
     mp_raise_ValueError(MP_ERROR_TEXT("wrong number of values to unpack"));
@@ -1044,6 +1075,12 @@ void mp_unpack_ex(mp_obj_t seq_in, size_t num_in, mp_obj_t *items) {
     }
     return;
 
+;
+;
+;
+;
+;
+;
 too_short:
     #if MICROPY_ERROR_REPORTING <= MICROPY_ERROR_REPORTING_TERSE
     mp_raise_ValueError(MP_ERROR_TEXT("wrong number of values to unpack"));
@@ -1267,7 +1304,7 @@ void mp_store_attr(mp_obj_t base, qstr attr, mp_obj_t value) {
     DEBUG_OP_printf("store attr %p.%s <- %p\n", base, qstr_str(attr), value);
     const mp_obj_type_t *type = mp_obj_get_type(base);
     if (MP_OBJ_TYPE_HAS_SLOT(type, attr)) {
-        mp_obj_t dest[2] = {MP_OBJ_SENTINEL, value};
+        mp_obj_t dest[2]; dest[0] = MP_OBJ_SENTINEL; dest[1] = value;
         MP_OBJ_TYPE_GET_SLOT(type, attr)(base, attr, dest);
         if (dest[0] == MP_OBJ_NULL) {
             // success
@@ -1729,7 +1766,7 @@ NORETURN void mp_raise_OSError_with_filename(int errno_, const char *filename) {
     vstr_init(&vstr, 32);
     vstr_printf(&vstr, "can't open %s", filename);
     mp_obj_t o_str = mp_obj_new_str_from_vstr(&vstr);
-    mp_obj_t args[2] = { MP_OBJ_NEW_SMALL_INT(errno_), MP_OBJ_FROM_PTR(o_str)};
+    mp_obj_t args[2]; args[0] = MP_OBJ_NEW_SMALL_INT(errno_); args[1] = MP_OBJ_FROM_PTR(o_str);
     nlr_raise(mp_obj_exception_make_new(&mp_type_OSError, 2, 0, args));
 }
 

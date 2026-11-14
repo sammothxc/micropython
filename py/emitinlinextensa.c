@@ -325,11 +325,23 @@ static void emit_inline_xtensa_op(emit_inline_asm_t *emit, qstr op, mp_uint_t n_
 
     return;
 
+;
+;
+;
+;
+;
+;
 unknown_op:
     emit_inline_xtensa_error_exc(emit, mp_obj_new_exception_msg_varg(&mp_type_SyntaxError, MP_ERROR_TEXT("unsupported Xtensa instruction '%s' with %d arguments"), op_str, n_args));
     return;
 
     /*
+;
+;
+;
+;
+;
+;
 branch_not_in_range:
     emit_inline_xtensa_error_msg(emit, MP_ERROR_TEXT("branch not in range"));
     return;

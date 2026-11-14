@@ -251,6 +251,12 @@ static mp_uint_t get_arg_vfpreg(emit_inline_asm_t *emit, const char *op, mp_pars
             return regno;
         }
     }
+;
+;
+;
+;
+;
+;
 malformed:
     emit_inline_thumb_error_exc(emit,
         mp_obj_new_exception_msg_varg(&mp_type_SyntaxError,
@@ -305,6 +311,12 @@ static mp_uint_t get_arg_reglist(emit_inline_asm_t *emit, const char *op, mp_par
 
     return reglist;
 
+;
+;
+;
+;
+;
+;
 bad_arg:
     emit_inline_thumb_error_exc(emit, mp_obj_new_exception_msg_varg(&mp_type_SyntaxError, MP_ERROR_TEXT("'%s' expects {r0, r1, ...}"), op));
     return 0;
@@ -341,6 +353,12 @@ static bool get_arg_addr(emit_inline_asm_t *emit, const char *op, mp_parse_node_
     *pn_offset = pns->nodes[1];
     return true;
 
+;
+;
+;
+;
+;
+;
 bad_arg:
     emit_inline_thumb_error_exc(emit, mp_obj_new_exception_msg_varg(&mp_type_SyntaxError, MP_ERROR_TEXT("'%s' expects an address of the form [a, b]"), op));
     return false;
@@ -840,10 +858,22 @@ static void emit_inline_thumb_op(emit_inline_asm_t *emit, qstr op, mp_uint_t n_a
 
     return;
 
+;
+;
+;
+;
+;
+;
 unknown_op:
     emit_inline_thumb_error_exc(emit, mp_obj_new_exception_msg_varg(&mp_type_SyntaxError, MP_ERROR_TEXT("unsupported Thumb instruction '%s' with %d arguments"), op_str, n_args));
     return;
 
+;
+;
+;
+;
+;
+;
 branch_not_in_range:
     emit_inline_thumb_error_msg(emit, MP_ERROR_TEXT("branch not in range"));
     return;

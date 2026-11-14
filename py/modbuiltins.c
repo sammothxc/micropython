@@ -120,7 +120,7 @@ static mp_obj_t mp_builtin_any(mp_obj_t o_in) {
 MP_DEFINE_CONST_FUN_OBJ_1(mp_builtin_any_obj, mp_builtin_any);
 
 static mp_obj_t mp_builtin_bin(mp_obj_t o_in) {
-    mp_obj_t args[] = { MP_OBJ_NEW_QSTR(MP_QSTR__brace_open__colon__hash_b_brace_close_), o_in };
+    mp_obj_t args[2]; args[0] = MP_OBJ_NEW_QSTR(MP_QSTR__brace_open__colon__hash_b_brace_close_); args[1] = o_in;
     return mp_obj_str_format(MP_ARRAY_SIZE(args), args, NULL);
 }
 MP_DEFINE_CONST_FUN_OBJ_1(mp_builtin_bin_obj, mp_builtin_bin);
@@ -203,7 +203,7 @@ static mp_obj_t mp_builtin_hex(mp_obj_t o_in) {
     #if MICROPY_PY_BUILTINS_STR_OP_MODULO
     return mp_binary_op(MP_BINARY_OP_MODULO, MP_OBJ_NEW_QSTR(MP_QSTR__percent__hash_x), o_in);
     #else
-    mp_obj_t args[] = { MP_OBJ_NEW_QSTR(MP_QSTR__brace_open__colon__hash_x_brace_close_), o_in };
+    mp_obj_t args[2]; args[0] = MP_OBJ_NEW_QSTR(MP_QSTR__brace_open__colon__hash_x_brace_close_); args[1] = o_in;
     return mp_obj_str_format(MP_ARRAY_SIZE(args), args, NULL);
     #endif
 }
@@ -330,7 +330,7 @@ static mp_obj_t mp_builtin_oct(mp_obj_t o_in) {
     #if MICROPY_PY_BUILTINS_STR_OP_MODULO
     return mp_binary_op(MP_BINARY_OP_MODULO, MP_OBJ_NEW_QSTR(MP_QSTR__percent__hash_o), o_in);
     #else
-    mp_obj_t args[] = { MP_OBJ_NEW_QSTR(MP_QSTR__brace_open__colon__hash_o_brace_close_), o_in };
+    mp_obj_t args[2]; args[0] = MP_OBJ_NEW_QSTR(MP_QSTR__brace_open__colon__hash_o_brace_close_); args[1] = o_in;
     return mp_obj_str_format(MP_ARRAY_SIZE(args), args, NULL);
     #endif
 }
@@ -436,7 +436,7 @@ static mp_obj_t mp_builtin___repl_print__(mp_obj_t o) {
         mp_print_str(MP_PYTHON_PRINTER, "\n");
         #if MICROPY_CAN_OVERRIDE_BUILTINS
         // Set "_" special variable
-        mp_obj_t dest[2] = {MP_OBJ_SENTINEL, o};
+        mp_obj_t dest[2]; dest[0] = MP_OBJ_SENTINEL; dest[1] = o;
         MP_OBJ_TYPE_GET_SLOT(&mp_type_module, attr)(MP_OBJ_FROM_PTR(&mp_module_builtins), MP_QSTR__, dest);
         #endif
     }

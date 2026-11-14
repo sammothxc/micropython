@@ -601,6 +601,12 @@ static void c_assign(compiler_t *comp, mp_parse_node_t pn, assign_kind_t assign_
     }
     return;
 
+;
+;
+;
+;
+;
+;
 cannot_assign:
     compile_syntax_error(comp, pn, MP_ERROR_TEXT("can't assign to expression"));
 }
@@ -1005,6 +1011,12 @@ static void c_del_stmt(compiler_t *comp, mp_parse_node_t pn) {
 
     return;
 
+;
+;
+;
+;
+;
+;
 cannot_delete:
     compile_syntax_error(comp, (mp_parse_node_t)pn, MP_ERROR_TEXT("can't delete expression"));
 }
@@ -1363,6 +1375,12 @@ static void compile_if_stmt(compiler_t *comp, mp_parse_node_struct_t *pns) {
     // compile else block
     compile_node(comp, pns->nodes[3]); // can be null
 
+;
+;
+;
+;
+;
+;
 done:
     EMIT_ARG(label_assign, l_end);
 }
@@ -2945,13 +2963,20 @@ static void compile_scope_lambda_param(compiler_t *comp, mp_parse_node_t pn) {
 }
 
 static void compile_scope_comp_iter(compiler_t *comp, mp_parse_node_struct_t *pns_comp_for, mp_parse_node_t pn_inner_expr, int for_depth) {
+    mp_parse_node_t pn_iter;
     uint l_top = comp_next_label(comp);
     uint l_end = comp_next_label(comp);
     EMIT_ARG(label_assign, l_top);
     EMIT_ARG(for_iter, l_end);
     c_assign(comp, pns_comp_for->nodes[0], ASSIGN_STORE);
-    mp_parse_node_t pn_iter = pns_comp_for->nodes[2];
+    pn_iter = pns_comp_for->nodes[2];
 
+;
+;
+;
+;
+;
+;
 tail_recursion:
     if (MP_PARSE_NODE_IS_NULL(pn_iter)) {
         // no more nested if/for; compile inner expression

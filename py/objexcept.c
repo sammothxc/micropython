@@ -510,8 +510,8 @@ mp_obj_t mp_obj_new_exception_msg_vlist(const mp_obj_type_t *exc_type, mp_rom_er
     } else {
         // We have some memory to format the string.
         // TODO: Optimise this to format-while-decompressing (and not require the temp stack space).
-        struct _exc_printer_t exc_pr = {!used_emg_buf, o_str_alloc, 0, o_str_buf};
-        mp_print_t print = {&exc_pr, exc_add_strn};
+        struct _exc_printer_t exc_pr; exc_pr.allow_realloc = !used_emg_buf; exc_pr.alloc = o_str_alloc; exc_pr.len = 0; exc_pr.buf = o_str_buf;
+        mp_print_t print; print.data = &exc_pr; print.print_strn = exc_add_strn;
         const char *fmt2 = (const char *)fmt;
         #if MICROPY_ROM_TEXT_COMPRESSION
         byte decompressed[MP_MAX_UNCOMPRESSED_TEXT_LEN];

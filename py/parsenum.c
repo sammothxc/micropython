@@ -116,6 +116,12 @@ mp_obj_t mp_parse_num_integer(const char *restrict str_, size_t len, int base, m
     // create the small int
     ret_val = MP_OBJ_NEW_SMALL_INT(int_val);
 
+;
+;
+;
+;
+;
+;
 have_ret_val:
     // check we parsed something
     if (str == str_val_start) {
@@ -134,6 +140,12 @@ have_ret_val:
     // return the object
     return ret_val;
 
+;
+;
+;
+;
+;
+;
 overflow:
     // reparse using long int
     {
@@ -143,6 +155,12 @@ overflow:
         goto have_ret_val;
     }
 
+;
+;
+;
+;
+;
+;
 value_error:
     {
         #if MICROPY_ERROR_REPORTING <= MICROPY_ERROR_REPORTING_TERSE
@@ -231,6 +249,12 @@ mp_obj_t mp_parse_num_float(const char *str, size_t len, bool allow_imag, mp_lex
     #if MICROPY_PY_BUILTINS_COMPLEX
     unsigned int real_imag_state = REAL_IMAG_STATE_START;
     mp_float_t dec_real = 0;
+;
+;
+;
+;
+;
+;
 parse_start:
     #endif
 
@@ -417,6 +441,12 @@ parse_start:
 
     return mp_obj_new_float(dec_val);
 
+;
+;
+;
+;
+;
+;
 value_error:
     raise_exc(mp_obj_new_exception_msg(&mp_type_ValueError, MP_ERROR_TEXT("invalid syntax for number")), lex);
 

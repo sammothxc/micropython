@@ -82,7 +82,7 @@ static mp_obj_t enumerate_iternext(mp_obj_t self_in) {
     if (next == MP_OBJ_STOP_ITERATION) {
         return MP_OBJ_STOP_ITERATION;
     } else {
-        mp_obj_t items[] = {MP_OBJ_NEW_SMALL_INT(self->cur++), next};
+        mp_obj_t items[2]; items[0] = MP_OBJ_NEW_SMALL_INT(self->cur++); items[1] = next;
         return mp_obj_new_tuple(2, items);
     }
 }

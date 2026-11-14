@@ -1252,6 +1252,7 @@ const mp_obj_t *mp_obj_property_get(mp_obj_t self_in);
 
 // sequence helpers
 
+size_t mp_seq_multiply_len(size_t item_sz, size_t len, mp_int_t times);
 void mp_seq_multiply(const void *items, size_t item_sz, size_t len, size_t times, void *dest);
 #if MICROPY_PY_BUILTINS_SLICE
 bool mp_seq_get_fast_slice_indexes(mp_uint_t len, mp_obj_t slice, mp_bound_slice_t *indexes);

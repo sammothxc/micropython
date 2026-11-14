@@ -58,11 +58,7 @@ static mp_obj_t slice_indices(mp_obj_t self_in, mp_obj_t length_obj) {
     mp_bound_slice_t bound_indices;
     mp_obj_slice_indices(self_in, length, &bound_indices);
 
-    mp_obj_t results[3] = {
-        MP_OBJ_NEW_SMALL_INT(bound_indices.start),
-        MP_OBJ_NEW_SMALL_INT(bound_indices.stop),
-        MP_OBJ_NEW_SMALL_INT(bound_indices.step),
-    };
+    mp_obj_t results[3]; results[0] = MP_OBJ_NEW_SMALL_INT(bound_indices.start); results[1] = MP_OBJ_NEW_SMALL_INT(bound_indices.stop); results[2] = MP_OBJ_NEW_SMALL_INT(bound_indices.step);
     return mp_obj_new_tuple(3, results);
 }
 static MP_DEFINE_CONST_FUN_OBJ_2(slice_indices_obj, slice_indices);

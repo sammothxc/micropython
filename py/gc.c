@@ -188,7 +188,7 @@ static void gc_setup_area(mp_state_mem_area_t *area, void *start, void *end) {
 
 void gc_init(void *start, void *end) {
     // align end pointer on block boundary
-    end = (void *)((uintptr_t)end & (~(BYTES_PER_BLOCK - 1)));
+    end = (void *)((uintptr_t)end & (~((uintptr_t)BYTES_PER_BLOCK - 1)));
     DEBUG_printf("Initializing GC heap: %p..%p = " UINT_FMT " bytes\n", start, end, (byte *)end - (byte *)start);
 
     gc_setup_area(&MP_STATE_MEM(area), start, end);
@@ -221,7 +221,7 @@ void gc_add(void *start, void *end) {
     mp_state_mem_area_t *area = (mp_state_mem_area_t *)start;
     start = (void *)((uintptr_t)start + sizeof(mp_state_mem_area_t));
 
-    end = (void *)((uintptr_t)end & (~(BYTES_PER_BLOCK - 1)));
+    end = (void *)((uintptr_t)end & (~((uintptr_t)BYTES_PER_BLOCK - 1)));
     DEBUG_printf("Adding GC heap: %p..%p = " UINT_FMT " bytes\n", start, end, (byte *)end - (byte *)start);
 
     // Init this area
@@ -406,7 +406,7 @@ static void gc_mark_subtree(size_t block)
 
         // check this block's children
         void **ptrs = (void **)PTR_FROM_BLOCK(area, block);
-        for (size_t i = n_blocks * BYTES_PER_BLOCK / sizeof(void *); i > 0; i--, ptrs++) {
+        for (size_t i = (n_blocks * BYTES_PER_BLOCK - sizeof(void *)) / 2 + 1; i > 0; i--, ptrs = (void **)((char *)ptrs + 2)) {
             MICROPY_GC_HOOK_LOOP(i);
             void *ptr = *ptrs;
             // If this is a heap pointer that hasn't been marked, mark it and push
@@ -576,7 +576,7 @@ void gc_collect_start(void) {
     void **ptrs = (void **)(void *)&mp_state_ctx;
     size_t root_start = offsetof(mp_state_ctx_t, thread.dict_locals);
     size_t root_end = offsetof(mp_state_ctx_t, vm.qstr_last_chunk);
-    gc_collect_root(ptrs + root_start / sizeof(void *), (root_end - root_start) / sizeof(void *));
+    for (size_t off = root_start; off + sizeof(void *) <= root_end; off += 2) { gc_collect_root((void **)((char *)ptrs + off), 1); }
 
     #if MICROPY_ENABLE_PYSTACK
     // Trace root pointers from the Python stack.
@@ -809,6 +809,12 @@ void *gc_alloc(size_t n_bytes, unsigned int alloc_flags) {
     }
 
     // found, ending at block i inclusive
+;
+;
+;
+;
+;
+;
 found:
     // get starting and end blocks, both inclusive
     end_block = i;

@@ -296,6 +296,12 @@ static mp_obj_t bytes_make_new(const mp_obj_type_t *type_in, size_t n_args, size
 
     return mp_obj_new_bytes_from_vstr(&vstr);
 
+;
+;
+;
+;
+;
+;
 wrong_args:
     mp_raise_TypeError(MP_ERROR_TEXT("wrong number of arguments"));
 }
@@ -367,7 +373,7 @@ mp_obj_t mp_obj_str_binary_op(mp_binary_op_t op, mp_obj_t lhs_in, mp_obj_t rhs_i
             }
         }
         vstr_t vstr;
-        vstr_init_len(&vstr, lhs_len * n);
+        vstr_init_len(&vstr, mp_seq_multiply_len(sizeof(*lhs_data), lhs_len, n));
         mp_seq_multiply(lhs_data, sizeof(*lhs_data), lhs_len, n, vstr.buf);
         return mp_obj_new_str_type_from_vstr(lhs_type, &vstr);
     }

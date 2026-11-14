@@ -483,7 +483,7 @@ MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(mp_stream_seek_obj, 2, 3, stream_seek);
 static mp_obj_t stream_tell(mp_obj_t self) {
     mp_obj_t offset = MP_OBJ_NEW_SMALL_INT(0);
     mp_obj_t whence = MP_OBJ_NEW_SMALL_INT(SEEK_CUR);
-    const mp_obj_t args[3] = {self, offset, whence};
+    mp_obj_t args[3]; args[0] = self; args[1] = offset; args[2] = whence;
     return stream_seek(3, args);
 }
 MP_DEFINE_CONST_FUN_OBJ_1(mp_stream_tell_obj, stream_tell);

@@ -82,6 +82,24 @@ static void *realloc_ext(void *ptr, size_t n_bytes, bool allow_move) {
 
 #endif // MICROPY_ENABLE_GC
 
+#if SIZE_MAX <= 0xffff
+// Overflow-checked size arithmetic for targets with a 16-bit size_t, used by
+// the m_new/m_renew macros.
+size_t m_size_mul(size_t item_size, size_t num) {
+    if (num > SIZE_MAX / item_size) {
+        m_malloc_fail(SIZE_MAX);
+    }
+    return item_size * num;
+}
+
+size_t m_size_add(size_t a, size_t b) {
+    if (b > SIZE_MAX - a) {
+        m_malloc_fail(SIZE_MAX);
+    }
+    return a + b;
+}
+#endif
+
 void *m_malloc(size_t num_bytes) {
     void *ptr = malloc(num_bytes);
     if (ptr == NULL && num_bytes != 0) {

@@ -60,10 +60,22 @@ mp_obj_t mp_call_method_self_n_kw(mp_obj_t meth, mp_obj_t self, size_t n_args, s
         args2 = m_new_maybe(mp_obj_t, 1 + n_total);
         free_args2 = args2;
     }
+    #if MICROPY_NO_ALLOCA
+    // Without a real alloca() a short args array goes in a fixed buffer on the
+    // C stack; taking it from the heap would leave garbage on every call.
+    mp_obj_t args2_buf[1 + 4];
+    if (args2 == NULL) {
+        if (n_total > 4) {
+            m_malloc_fail(sizeof(mp_obj_t) * (1 + n_total));
+        }
+        args2 = args2_buf;
+    }
+    #else
     if (args2 == NULL) {
         // (fallback to) use stack to allocate temporary args array
         args2 = alloca(sizeof(mp_obj_t) * (1 + n_total));
     }
+    #endif
     #endif
     args2[0] = self;
     memcpy(args2 + 1, args, n_total * sizeof(mp_obj_t));

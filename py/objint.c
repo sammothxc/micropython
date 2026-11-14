@@ -91,7 +91,7 @@ static mp_fp_as_int_class_t mp_classify_fp_as_int(mp_float_t val) {
         #elif MICROPY_FLOAT_IMPL == MICROPY_FLOAT_IMPL_DOUBLE
         uint32_t i[2];
         #endif
-    } u = {val};
+    } u; u.f = val;
 
     uint32_t e;
     #if MICROPY_FLOAT_IMPL == MICROPY_FLOAT_IMPL_FLOAT
@@ -102,22 +102,22 @@ static mp_fp_as_int_class_t mp_classify_fp_as_int(mp_float_t val) {
 #define MP_FLOAT_SIGN_SHIFT_I32 ((MP_FLOAT_FRAC_BITS + MP_FLOAT_EXP_BITS) % 32)
 #define MP_FLOAT_EXP_SHIFT_I32 (MP_FLOAT_FRAC_BITS % 32)
 
-    if (e & (1U << MP_FLOAT_SIGN_SHIFT_I32)) {
+    if (e & (1UL << MP_FLOAT_SIGN_SHIFT_I32)) {
         #if MICROPY_FLOAT_IMPL == MICROPY_FLOAT_IMPL_DOUBLE
         e |= u.i[MP_ENDIANNESS_BIG] != 0;
         #endif
-        if ((e & ~(1U << MP_FLOAT_SIGN_SHIFT_I32)) == 0) {
+        if ((e & ~(1UL << MP_FLOAT_SIGN_SHIFT_I32)) == 0) {
             // handle case of -0 (when sign is set but rest of bits are zero)
             e = 0;
         } else {
-            e += ((1U << MP_FLOAT_EXP_BITS) - 1) << MP_FLOAT_EXP_SHIFT_I32;
+            e += ((1UL << MP_FLOAT_EXP_BITS) - 1) << MP_FLOAT_EXP_SHIFT_I32;
         }
     } else {
-        e &= ~((1U << MP_FLOAT_EXP_SHIFT_I32) - 1);
+        e &= ~((1UL << MP_FLOAT_EXP_SHIFT_I32) - 1);
     }
     // 8 * sizeof(uintptr_t) counts the number of bits for a small int
     // TODO provide a way to configure this properly
-    if (e <= ((8 * sizeof(uintptr_t) + MP_FLOAT_EXP_BIAS - 3) << MP_FLOAT_EXP_SHIFT_I32)) {
+    if (e <= ((8UL * sizeof(uintptr_t) + MP_FLOAT_EXP_BIAS - 3) << MP_FLOAT_EXP_SHIFT_I32)) {
         return MP_FP_CLASS_FIT_SMALLINT;
     }
     #if MICROPY_LONGINT_IMPL == MICROPY_LONGINT_IMPL_LONGLONG
@@ -135,7 +135,7 @@ static mp_fp_as_int_class_t mp_classify_fp_as_int(mp_float_t val) {
 #undef MP_FLOAT_EXP_SHIFT_I32
 
 mp_obj_t mp_obj_new_int_from_float(mp_float_t val) {
-    mp_float_union_t u = {val};
+    mp_float_union_t u; u.f = val;
     // IEEE-754: if biased exponent is all 1 bits...
     if (u.p.exp == ((1 << MP_FLOAT_EXP_BITS) - 1)) {
         // ...then number is Inf (positive or negative) if fraction is 0, else NaN.

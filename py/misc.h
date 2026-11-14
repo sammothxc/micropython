@@ -57,7 +57,7 @@ typedef unsigned int uint;
 // do, others only with -Werror=vla, msvc always does.
 // The (void) is needed to avoid "left operand of comma operator has no effect [-Werror=unused-value]"
 // when using this macro on the left-hand side of a comma.
-#if defined(_MSC_VER) || defined(__cplusplus)
+#if defined(_MSC_VER) || defined(__cplusplus) || defined(__WATCOMC__)
 #define MP_STATIC_ASSERT_NONCONSTEXPR(cond) ((void)1)
 #else
 #define MP_STATIC_ASSERT_NONCONSTEXPR(cond) MP_STATIC_ASSERT(cond)
@@ -71,22 +71,36 @@ typedef unsigned int uint;
 
 // TODO make a lazy m_renew that can increase by a smaller amount than requested (but by at least 1 more element)
 
-#define m_new(type, num) ((type *)(m_malloc(sizeof(type) * (num))))
-#define m_new_maybe(type, num) ((type *)(m_malloc_maybe(sizeof(type) * (num))))
-#define m_new0(type, num) ((type *)(m_malloc0(sizeof(type) * (num))))
+// Size in bytes of num items of item_size bytes each, and the sum of two sizes.
+// Where size_t is only 16 bits wide these computations can overflow for
+// requests that are otherwise reasonable (a list of 16384 objects), so they
+// are checked and raise MemoryError instead of wrapping around.
+#if SIZE_MAX <= 0xffff
+size_t m_size_mul(size_t item_size, size_t num);
+size_t m_size_add(size_t a, size_t b);
+#define M_SIZE_MUL(item_size, num) ((item_size) == 1 ? (size_t)(num) : m_size_mul((item_size), (num)))
+#define M_SIZE_ADD(a, b) (m_size_add((a), (b)))
+#else
+#define M_SIZE_MUL(item_size, num) ((item_size) * (num))
+#define M_SIZE_ADD(a, b) ((a) + (b))
+#endif
+
+#define m_new(type, num) ((type *)(m_malloc(M_SIZE_MUL(sizeof(type), (num)))))
+#define m_new_maybe(type, num) ((type *)(m_malloc_maybe(M_SIZE_MUL(sizeof(type), (num)))))
+#define m_new0(type, num) ((type *)(m_malloc0(M_SIZE_MUL(sizeof(type), (num)))))
 #define m_new_obj(type) (m_new(type, 1))
 #define m_new_obj_maybe(type) (m_new_maybe(type, 1))
-#define m_new_obj_var(obj_type, var_field, var_type, var_num) ((obj_type *)m_malloc(offsetof(obj_type, var_field) + sizeof(var_type) * (var_num)))
-#define m_new_obj_var0(obj_type, var_field, var_type, var_num) ((obj_type *)m_malloc0(offsetof(obj_type, var_field) + sizeof(var_type) * (var_num)))
-#define m_new_obj_var_maybe(obj_type, var_field, var_type, var_num) ((obj_type *)m_malloc_maybe(offsetof(obj_type, var_field) + sizeof(var_type) * (var_num)))
+#define m_new_obj_var(obj_type, var_field, var_type, var_num) ((obj_type *)m_malloc(M_SIZE_ADD(offsetof(obj_type, var_field), M_SIZE_MUL(sizeof(var_type), (var_num)))))
+#define m_new_obj_var0(obj_type, var_field, var_type, var_num) ((obj_type *)m_malloc0(M_SIZE_ADD(offsetof(obj_type, var_field), M_SIZE_MUL(sizeof(var_type), (var_num)))))
+#define m_new_obj_var_maybe(obj_type, var_field, var_type, var_num) ((obj_type *)m_malloc_maybe(M_SIZE_ADD(offsetof(obj_type, var_field), M_SIZE_MUL(sizeof(var_type), (var_num)))))
 #if MICROPY_MALLOC_USES_ALLOCATED_SIZE
-#define m_renew(type, ptr, old_num, new_num) ((type *)(m_realloc((ptr), sizeof(type) * (old_num), sizeof(type) * (new_num))))
-#define m_renew_maybe(type, ptr, old_num, new_num, allow_move) ((type *)(m_realloc_maybe((ptr), sizeof(type) * (old_num), sizeof(type) * (new_num), (allow_move))))
+#define m_renew(type, ptr, old_num, new_num) ((type *)(m_realloc((ptr), sizeof(type) * (old_num), M_SIZE_MUL(sizeof(type), (new_num)))))
+#define m_renew_maybe(type, ptr, old_num, new_num, allow_move) ((type *)(m_realloc_maybe((ptr), sizeof(type) * (old_num), M_SIZE_MUL(sizeof(type), (new_num)), (allow_move))))
 #define m_del(type, ptr, num) m_free(ptr, sizeof(type) * (num))
 #define m_del_var(obj_type, var_field, var_type, var_num, ptr) (m_free(ptr, offsetof(obj_type, var_field) + sizeof(var_type) * (var_num)))
 #else
-#define m_renew(type, ptr, old_num, new_num) ((type *)(m_realloc((ptr), sizeof(type) * (new_num))))
-#define m_renew_maybe(type, ptr, old_num, new_num, allow_move) ((type *)(m_realloc_maybe((ptr), sizeof(type) * (new_num), (allow_move))))
+#define m_renew(type, ptr, old_num, new_num) ((type *)(m_realloc((ptr), M_SIZE_MUL(sizeof(type), (new_num)))))
+#define m_renew_maybe(type, ptr, old_num, new_num, allow_move) ((type *)(m_realloc_maybe((ptr), M_SIZE_MUL(sizeof(type), (new_num)), (allow_move))))
 #define m_del(type, ptr, num) ((void)(num), m_free(ptr))
 #define m_del_var(obj_type, var_field, var_type, var_num, ptr) ((void)(var_num), m_free(ptr))
 #endif
@@ -380,7 +394,7 @@ static inline bool mp_check(bool value) {
 
 // mp_int_t can be larger than long, i.e. Windows 64-bit, nan-box variants
 static inline uint32_t mp_clz_mpi(mp_int_t x) {
-    #ifdef __XC16__
+    #if defined(__XC16__) || defined(__WATCOMC__)
     mp_uint_t mask = MP_OBJ_WORD_MSBIT_HIGH;
     mp_uint_t zeroes = 0;
     while (mask != 0) {

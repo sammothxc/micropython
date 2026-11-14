@@ -121,7 +121,7 @@ mp_obj_t mp_obj_dict_make_new(const mp_obj_type_t *type, size_t n_args, size_t n
     }
     #endif
     if (n_args > 0 || n_kw > 0) {
-        mp_obj_t args2[2] = {dict_out, args[0]}; // args[0] is always valid, even if it's not a positional arg
+        mp_obj_t args2[2]; args2[0] = dict_out; args2[1] = args[0]; // args[0] is always valid, even if it's not a positional arg
         mp_map_t kwargs;
         mp_map_init_fixed_table(&kwargs, n_kw, args + n_args);
         dict_update(n_args + 1, args2, &kwargs); // dict_update will check that n_args + 1 == 1 or 2
@@ -196,7 +196,7 @@ static mp_obj_t dict_binary_op(mp_binary_op_t op, mp_obj_t lhs_in, mp_obj_t rhs_
             if (op == MP_BINARY_OP_OR) {
                 lhs_in = mp_obj_dict_copy(lhs_in);
             }
-            mp_obj_t dicts[2] = {lhs_in, rhs_in};
+            mp_obj_t dicts[2]; dicts[0] = lhs_in; dicts[1] = rhs_in;
             dict_update(2, dicts, (mp_map_t *)&mp_const_empty_map);
             return lhs_in;
         }
@@ -367,7 +367,7 @@ static mp_obj_t dict_popitem(mp_obj_t self_in) {
     mp_map_elem_t *next = dict_iter_next(self, &cur);
     assert(next);
     self->map.used--;
-    mp_obj_t items[] = {next->key, next->value};
+    mp_obj_t items[2]; items[0] = next->key; items[1] = next->value;
     next->key = MP_OBJ_SENTINEL; // must mark key as sentinel to indicate that it was deleted
     next->value = MP_OBJ_NULL;
     mp_obj_t tuple = mp_obj_new_tuple(2, items);
@@ -465,7 +465,7 @@ static mp_obj_t dict_view_it_iternext(mp_obj_t self_in) {
         switch (self->kind) {
             case MP_DICT_VIEW_ITEMS:
             default: {
-                mp_obj_t items[] = {next->key, next->value};
+                mp_obj_t items[2]; items[0] = next->key; items[1] = next->value;
                 return mp_obj_new_tuple(2, items);
             }
             case MP_DICT_VIEW_KEYS:
@@ -665,7 +665,7 @@ mp_obj_t mp_obj_dict_store(mp_obj_t self_in, mp_obj_t key, mp_obj_t value) {
 }
 
 mp_obj_t mp_obj_dict_delete(mp_obj_t self_in, mp_obj_t key) {
-    mp_obj_t args[2] = {self_in, key};
+    mp_obj_t args[2]; args[0] = self_in; args[1] = key;
     dict_get_helper(2, args, MP_MAP_LOOKUP_REMOVE_IF_FOUND);
     return self_in;
 }

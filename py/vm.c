@@ -281,6 +281,12 @@ FRAME_SETUP();
     // outer exception handling loop
     for (;;) {
         nlr_buf_t nlr;
+;
+;
+;
+;
+;
+;
 outer_dispatch_loop:
         if (nlr_push(&nlr) == 0) {
             // local variables that are not visible to the exception handler
@@ -306,6 +312,12 @@ outer_dispatch_loop:
 
             // loop to execute byte code
             for (;;) {
+;
+;
+;
+;
+;
+;
 dispatch_loop:
                 #if MICROPY_OPT_COMPUTED_GOTO
                 DISPATCH();
@@ -1091,6 +1103,12 @@ unwind_jump:;
 
                 ENTRY(MP_BC_RETURN_VALUE):
                     MARK_EXC_IP_SELECTIVE();
+;
+;
+;
+;
+;
+;
 unwind_return:
                     // Search for and execute finally handlers that aren't already active
                     while (exc_sp >= exc_stack) {
@@ -1180,6 +1198,12 @@ unwind_return:
                 }
 
                 ENTRY(MP_BC_YIELD_VALUE):
+;
+;
+;
+;
+;
+;
 yield:
                     nlr_pop();
                     code_state->ip = ip;
@@ -1311,6 +1335,12 @@ yield:
                 } // switch
                 #endif
 
+;
+;
+;
+;
+;
+;
 pending_exception_check:
                 // We've just done a branch, use this as a convenient point to
                 // run periodic code/checks and/or bounce the GIL.. i.e.
@@ -1367,6 +1397,12 @@ pending_exception_check:
             } // for loop
 
         } else {
+;
+;
+;
+;
+;
+;
 exception_handler:
             // exception occurred
 
@@ -1405,6 +1441,12 @@ exception_handler:
             #endif
 
 #if MICROPY_STACKLESS
+;
+;
+;
+;
+;
+;
 unwind_loop:
 #endif
             // Set traceback info (file and line number) where the exception occurred, but not for:

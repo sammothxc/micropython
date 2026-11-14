@@ -327,10 +327,7 @@ mp_obj_t mp_obj_float_binary_op(mp_binary_op_t op, mp_float_t lhs_val, mp_obj_t 
                 goto zero_division_error;
             }
             mp_obj_float_divmod(&lhs_val, &rhs_val);
-            mp_obj_t tuple[2] = {
-                mp_obj_new_float(lhs_val),
-                mp_obj_new_float(rhs_val),
-            };
+            mp_obj_t tuple[2]; tuple[0] = mp_obj_new_float(lhs_val); tuple[1] = mp_obj_new_float(rhs_val);
             return mp_obj_new_tuple(2, tuple);
         }
         case MP_BINARY_OP_LESS:

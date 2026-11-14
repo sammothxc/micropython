@@ -757,7 +757,7 @@ void mpz_set_from_ll(mpz_t *z, long long val, bool is_signed) {
 
 #if MICROPY_PY_BUILTINS_FLOAT
 void mpz_set_from_float(mpz_t *z, mp_float_t src) {
-    mp_float_union_t u = {src};
+    mp_float_union_t u; u.f = src;
     z->neg = u.p.sgn;
     if (u.p.exp == 0) {
         // value == 0 || value < 1
@@ -1604,7 +1604,7 @@ bool mpz_as_bytes(const mpz_t *z, bool big_endian, bool as_signed, size_t len, b
         bits += DIG_SIZE;
         d = (d << DIG_SIZE) | *zdig++;
         for (; bits >= 8; bits -= 8, d >>= 8) {
-            mpz_dig_t val = d;
+            mpz_dbl_dig_t val = d; // wider than a byte, to hold the carry
             if (z->neg) {
                 val = (~val & 0xff) + carry;
                 carry = val >> 8;

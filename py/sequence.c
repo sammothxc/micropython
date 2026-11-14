@@ -33,6 +33,19 @@
 
 #define SWAP(type, var1, var2) { type t = var2; var2 = var1; var1 = t; }
 
+// Returns the number of items in a sequence of len items repeated times
+// times.  Raises MemoryError if that many items of item_sz bytes cannot be
+// described by a size_t, which matters when size_t is narrower than mp_int_t.
+size_t mp_seq_multiply_len(size_t item_sz, size_t len, mp_int_t times) {
+    if (times <= 0 || len == 0) {
+        return 0;
+    }
+    if ((mp_uint_t)times > (mp_uint_t)(SIZE_MAX / item_sz / len)) {
+        mp_raise_type(&mp_type_MemoryError);
+    }
+    return len * (size_t)times;
+}
+
 // Implements backend of sequence * integer operation. Assumes elements are
 // memory-adjacent in sequence.
 void mp_seq_multiply(const void *items, size_t item_sz, size_t len, size_t times, void *dest) {

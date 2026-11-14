@@ -31,6 +31,15 @@
 #include <string.h>
 
 #include "py/mphal.h"
+
+#include <limits.h>
+
+// Whether a long argument is passed differently from an int one.
+#if defined(__LP64__) || UINT_MAX < ULONG_MAX
+#define MP_PRINTF_LONG_IS_WIDER (1)
+#else
+#define MP_PRINTF_LONG_IS_WIDER (0)
+#endif
 #include "py/mpprint.h"
 #include "py/obj.h"
 #include "py/objint.h"
@@ -451,14 +460,15 @@ int mp_vprintf(const mp_print_t *print, const char *fmt, va_list args) {
             }
         }
 
-        // parse long specifiers (only for LP64 model where they make a difference)
-        #ifndef __LP64__
+        // parse long specifiers (only where long is wider than int: the LP64
+        // model and targets with a 16-bit int)
+        #if !MP_PRINTF_LONG_IS_WIDER
         const
         #endif
         bool long_arg = false;
         if (*fmt == 'l') {
             ++fmt;
-            #ifdef __LP64__
+            #if MP_PRINTF_LONG_IS_WIDER
             long_arg = true;
             #endif
         }

@@ -299,7 +299,7 @@ static mp_obj_t mp_prof_callback_invoke(mp_obj_t callback, prof_callback_args_t 
 
     mp_prof_is_executing = true;
 
-    mp_obj_t a[3] = {MP_OBJ_FROM_PTR(args->frame), args->event, args->arg};
+    mp_obj_t a[3]; a[0] = MP_OBJ_FROM_PTR(args->frame); a[1] = args->event; a[2] = args->arg;
     mp_obj_t top = mp_call_function_n_kw(callback, 3, 0, a);
 
     mp_prof_is_executing = false;

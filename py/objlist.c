@@ -132,7 +132,7 @@ static mp_obj_t list_binary_op(mp_binary_op_t op, mp_obj_t lhs, mp_obj_t rhs) {
             if (n < 0) {
                 n = 0;
             }
-            mp_obj_list_t *s = list_new(o->len * n);
+            mp_obj_list_t *s = list_new(mp_seq_multiply_len(sizeof(*o->items), o->len, n));
             mp_seq_multiply(o->items, sizeof(*o->items), o->len, n, s->items);
             return MP_OBJ_FROM_PTR(s);
         }
@@ -178,7 +178,7 @@ static mp_obj_t list_subscr(mp_obj_t self_in, mp_obj_t index, mp_obj_t value) {
             return mp_const_none;
         }
         #endif
-        mp_obj_t args[2] = {self_in, index};
+        mp_obj_t args[2]; args[0] = self_in; args[1] = index;
         list_pop(2, args);
         return mp_const_none;
     } else if (value == MP_OBJ_SENTINEL) {
@@ -403,7 +403,7 @@ static mp_obj_t list_insert(mp_obj_t self_in, mp_obj_t idx, mp_obj_t obj) {
 
 mp_obj_t mp_obj_list_remove(mp_obj_t self_in, mp_obj_t value) {
     mp_check_self(mp_obj_is_type(self_in, &mp_type_list));
-    mp_obj_t args[] = {self_in, value};
+    mp_obj_t args[2]; args[0] = self_in; args[1] = value;
     args[1] = list_index(2, args);
     list_pop(2, args);
 

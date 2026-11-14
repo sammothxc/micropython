@@ -245,14 +245,8 @@ static void mp_obj_class_lookup(struct class_lookup_data *lookup, const mp_obj_t
 static void instance_print(const mp_print_t *print, mp_obj_t self_in, mp_print_kind_t kind) {
     mp_obj_instance_t *self = MP_OBJ_TO_PTR(self_in);
     qstr meth = (kind == PRINT_STR) ? MP_QSTR___str__ : MP_QSTR___repr__;
-    mp_obj_t member[2] = {MP_OBJ_NULL};
-    struct class_lookup_data lookup = {
-        .obj = self,
-        .attr = meth,
-        .slot_offset = MP_OBJ_TYPE_OFFSETOF_SLOT(print),
-        .dest = member,
-        .is_type = false,
-    };
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                mp_obj_t member[2] = {MP_OBJ_NULL};
+    struct class_lookup_data lookup = {0};      lookup.obj = self; lookup.attr = meth; lookup.slot_offset = MP_OBJ_TYPE_OFFSETOF_SLOT(print); lookup.dest = member; lookup.is_type = false;
     mp_obj_class_lookup(&lookup, self->base.type);
     if (member[0] == MP_OBJ_NULL && kind == PRINT_STR) {
         // If there's no __str__, fall back to __repr__
@@ -288,14 +282,8 @@ static mp_obj_t mp_obj_instance_make_new(const mp_obj_type_t *self, size_t n_arg
     assert(mp_obj_is_instance_type(self));
 
     // look for __new__ function
-    mp_obj_t init_fn[2] = {MP_OBJ_NULL};
-    struct class_lookup_data lookup = {
-        .obj = NULL,
-        .attr = MP_QSTR___new__,
-        .slot_offset = MP_OBJ_TYPE_OFFSETOF_SLOT(make_new),
-        .dest = init_fn,
-        .is_type = false,
-    };
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                mp_obj_t init_fn[2] = {MP_OBJ_NULL};
+    struct class_lookup_data lookup = {0};      lookup.obj = NULL; lookup.attr = MP_QSTR___new__; lookup.slot_offset = MP_OBJ_TYPE_OFFSETOF_SLOT(make_new); lookup.dest = init_fn; lookup.is_type = false;
     mp_obj_class_lookup(&lookup, self);
 
     const mp_obj_type_t *native_base = NULL;
@@ -315,7 +303,7 @@ static mp_obj_t mp_obj_instance_make_new(const mp_obj_type_t *self, size_t n_arg
         // Call Python class __new__ function with all args to create an instance
         mp_obj_t new_ret;
         if (n_args == 0 && n_kw == 0) {
-            mp_obj_t args2[1] = {MP_OBJ_FROM_PTR(self)};
+            mp_obj_t args2[1]; args2[0] = MP_OBJ_FROM_PTR(self);
             new_ret = mp_call_function_n_kw(init_fn[0], 1, 0, args2);
         } else {
             mp_obj_t *args2 = m_new(mp_obj_t, 1 + n_args + 2 * n_kw);
@@ -422,14 +410,8 @@ static mp_obj_t instance_unary_op(mp_unary_op_t op, mp_obj_t self_in) {
         return MP_OBJ_NULL;
     }
     */
-    mp_obj_t member[2] = {MP_OBJ_NULL};
-    struct class_lookup_data lookup = {
-        .obj = self,
-        .attr = op_name,
-        .slot_offset = MP_OBJ_TYPE_OFFSETOF_SLOT(unary_op),
-        .dest = member,
-        .is_type = false,
-    };
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                mp_obj_t member[2] = {MP_OBJ_NULL};
+    struct class_lookup_data lookup = {0};      lookup.obj = self; lookup.attr = op_name; lookup.slot_offset = MP_OBJ_TYPE_OFFSETOF_SLOT(unary_op); lookup.dest = member; lookup.is_type = false;
     mp_obj_class_lookup(&lookup, self->base.type);
     if (member[0] == MP_OBJ_SENTINEL) {
         return mp_unary_op(op, self->subobj[0]);
@@ -551,14 +533,8 @@ static mp_obj_t instance_binary_op(mp_binary_op_t op, mp_obj_t lhs_in, mp_obj_t 
         return MP_OBJ_NULL;
     }
     */
-    mp_obj_t dest[3] = {MP_OBJ_NULL};
-    struct class_lookup_data lookup = {
-        .obj = lhs,
-        .attr = op_name,
-        .slot_offset = MP_OBJ_TYPE_OFFSETOF_SLOT(binary_op),
-        .dest = dest,
-        .is_type = false,
-    };
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                mp_obj_t dest[3] = {MP_OBJ_NULL};
+    struct class_lookup_data lookup = {0};      lookup.obj = lhs; lookup.attr = op_name; lookup.slot_offset = MP_OBJ_TYPE_OFFSETOF_SLOT(binary_op); lookup.dest = dest; lookup.is_type = false;
     mp_obj_class_lookup(&lookup, lhs->base.type);
 
     mp_obj_t res;
@@ -608,13 +584,7 @@ static void mp_obj_instance_load_attr(mp_obj_t self_in, qstr attr, mp_obj_t *des
         return;
     }
     #endif
-    struct class_lookup_data lookup = {
-        .obj = self,
-        .attr = attr,
-        .slot_offset = 0,
-        .dest = dest,
-        .is_type = false,
-    };
+    struct class_lookup_data lookup = {0};      lookup.obj = self; lookup.attr = attr; lookup.slot_offset = 0; lookup.dest = dest; lookup.is_type = false;
     mp_obj_class_lookup(&lookup, self->base.type);
     mp_obj_t member = dest[0];
     if (member != MP_OBJ_NULL) {
@@ -699,14 +669,8 @@ static bool mp_obj_instance_store_attr(mp_obj_t self_in, qstr attr, mp_obj_t val
     // With property and/or descriptors enabled we need to do a lookup
     // first in the class dict for the attribute to see if the store should
     // be delegated.
-    mp_obj_t member[2] = {MP_OBJ_NULL};
-    struct class_lookup_data lookup = {
-        .obj = self,
-        .attr = attr,
-        .slot_offset = 0,
-        .dest = member,
-        .is_type = false,
-    };
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                mp_obj_t member[2] = {MP_OBJ_NULL};
+    struct class_lookup_data lookup = {0};      lookup.obj = self; lookup.attr = attr; lookup.slot_offset = 0; lookup.dest = member; lookup.is_type = false;
     mp_obj_class_lookup(&lookup, self->base.type);
 
     if (member[0] != MP_OBJ_NULL) {
@@ -720,7 +684,7 @@ static bool mp_obj_instance_store_attr(mp_obj_t self_in, qstr attr, mp_obj_t val
             // requires overhead for the nested mp_call's and overhead for
             // the code.
             const mp_obj_t *proxy = mp_obj_property_get(member[0]);
-            mp_obj_t dest[2] = {self_in, value};
+            mp_obj_t dest[2]; dest[0] = self_in; dest[1] = value;
             if (value == MP_OBJ_NULL) {
                 // delete attribute
                 if (proxy[2] == mp_const_none) {
@@ -797,6 +761,12 @@ static bool mp_obj_instance_store_attr(mp_obj_t self_in, qstr attr, mp_obj_t val
     }
     #endif
 
+;
+;
+;
+;
+;
+;
 skip_special_accessors:
 
     if (value == MP_OBJ_NULL) {
@@ -822,13 +792,8 @@ static void mp_obj_instance_attr(mp_obj_t self_in, qstr attr, mp_obj_t *dest) {
 
 static mp_obj_t instance_subscr(mp_obj_t self_in, mp_obj_t index, mp_obj_t value) {
     mp_obj_instance_t *self = MP_OBJ_TO_PTR(self_in);
-    mp_obj_t member[4] = {MP_OBJ_NULL, MP_OBJ_NULL, index, value};
-    struct class_lookup_data lookup = {
-        .obj = self,
-        .slot_offset = MP_OBJ_TYPE_OFFSETOF_SLOT(subscr),
-        .dest = member,
-        .is_type = false,
-    };
+    mp_obj_t member[4]; member[0] = MP_OBJ_NULL; member[1] = MP_OBJ_NULL; member[2] = index; member[3] = value;
+    struct class_lookup_data lookup = {0};      lookup.obj = self; lookup.slot_offset = MP_OBJ_TYPE_OFFSETOF_SLOT(subscr); lookup.dest = member; lookup.is_type = false;
     if (value == MP_OBJ_NULL) {
         // delete item
         lookup.attr = MP_QSTR___delitem__;
@@ -857,24 +822,18 @@ static mp_obj_t instance_subscr(mp_obj_t self_in, mp_obj_t index, mp_obj_t value
 
 static mp_obj_t mp_obj_instance_get_call(mp_obj_t self_in, mp_obj_t *member) {
     mp_obj_instance_t *self = MP_OBJ_TO_PTR(self_in);
-    struct class_lookup_data lookup = {
-        .obj = self,
-        .attr = MP_QSTR___call__,
-        .slot_offset = MP_OBJ_TYPE_OFFSETOF_SLOT(call),
-        .dest = member,
-        .is_type = false,
-    };
+    struct class_lookup_data lookup = {0};      lookup.obj = self; lookup.attr = MP_QSTR___call__; lookup.slot_offset = MP_OBJ_TYPE_OFFSETOF_SLOT(call); lookup.dest = member; lookup.is_type = false;
     mp_obj_class_lookup(&lookup, self->base.type);
     return member[0];
 }
 
 bool mp_obj_instance_is_callable(mp_obj_t self_in) {
-    mp_obj_t member[2] = {MP_OBJ_NULL, MP_OBJ_NULL};
+    mp_obj_t member[2]; member[0] = MP_OBJ_NULL; member[1] = MP_OBJ_NULL;
     return mp_obj_instance_get_call(self_in, member) != MP_OBJ_NULL;
 }
 
 mp_obj_t mp_obj_instance_call(mp_obj_t self_in, size_t n_args, size_t n_kw, const mp_obj_t *args) {
-    mp_obj_t member[2] = {MP_OBJ_NULL, MP_OBJ_NULL};
+    mp_obj_t member[2]; member[0] = MP_OBJ_NULL; member[1] = MP_OBJ_NULL;
     mp_obj_t call = mp_obj_instance_get_call(self_in, member);
     if (call == MP_OBJ_NULL) {
         #if MICROPY_ERROR_REPORTING <= MICROPY_ERROR_REPORTING_TERSE
@@ -895,14 +854,8 @@ mp_obj_t mp_obj_instance_call(mp_obj_t self_in, size_t n_args, size_t n_kw, cons
 // Note that iter_buf may be NULL, and needs to be allocated if needed
 mp_obj_t mp_obj_instance_getiter(mp_obj_t self_in, mp_obj_iter_buf_t *iter_buf) {
     mp_obj_instance_t *self = MP_OBJ_TO_PTR(self_in);
-    mp_obj_t member[2] = {MP_OBJ_NULL};
-    struct class_lookup_data lookup = {
-        .obj = self,
-        .attr = MP_QSTR___iter__,
-        .slot_offset = MP_OBJ_TYPE_OFFSETOF_SLOT(iter),
-        .dest = member,
-        .is_type = false,
-    };
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                mp_obj_t member[2] = {MP_OBJ_NULL};
+    struct class_lookup_data lookup = {0};      lookup.obj = self; lookup.attr = MP_QSTR___iter__; lookup.slot_offset = MP_OBJ_TYPE_OFFSETOF_SLOT(iter); lookup.dest = member; lookup.is_type = false;
     mp_obj_class_lookup(&lookup, self->base.type);
     if (member[0] == MP_OBJ_NULL) {
         return MP_OBJ_NULL;
@@ -923,14 +876,8 @@ mp_obj_t mp_obj_instance_getiter(mp_obj_t self_in, mp_obj_iter_buf_t *iter_buf) 
 
 static mp_int_t instance_get_buffer(mp_obj_t self_in, mp_buffer_info_t *bufinfo, mp_uint_t flags) {
     mp_obj_instance_t *self = MP_OBJ_TO_PTR(self_in);
-    mp_obj_t member[2] = {MP_OBJ_NULL};
-    struct class_lookup_data lookup = {
-        .obj = self,
-        .attr = MP_QSTR_, // don't actually look for a method
-        .slot_offset = MP_OBJ_TYPE_OFFSETOF_SLOT(buffer),
-        .dest = member,
-        .is_type = false,
-    };
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                mp_obj_t member[2] = {MP_OBJ_NULL};
+    struct class_lookup_data lookup = {0};      lookup.obj = self; lookup.attr = MP_QSTR_; lookup.slot_offset = MP_OBJ_TYPE_OFFSETOF_SLOT(buffer); lookup.dest = member; lookup.is_type = false;
     mp_obj_class_lookup(&lookup, self->base.type);
     if (member[0] == MP_OBJ_SENTINEL) {
         const mp_obj_type_t *type = mp_obj_get_type(self->subobj[0]);
@@ -1065,13 +1012,7 @@ static void type_attr(mp_obj_t self_in, qstr attr, mp_obj_t *dest) {
             return;
         }
         #endif
-        struct class_lookup_data lookup = {
-            .obj = (mp_obj_instance_t *)self,
-            .attr = attr,
-            .slot_offset = 0,
-            .dest = dest,
-            .is_type = true,
-        };
+        struct class_lookup_data lookup = {0};      lookup.obj = (mp_obj_instance_t *)self; lookup.attr = attr; lookup.slot_offset = 0; lookup.dest = dest; lookup.is_type = true;
         mp_obj_class_lookup(&lookup, self);
     } else {
         // delete/store attribute
@@ -1278,7 +1219,7 @@ static mp_obj_t super_make_new(const mp_obj_type_t *type_in, size_t n_args, size
     }
 
     mp_obj_super_t *o = m_new_obj(mp_obj_super_t);
-    *o = (mp_obj_super_t) {{type_in}, args[0], args[1]};
+    o->base.type = type_in; o->type = args[0]; o->obj = args[1];
     return MP_OBJ_FROM_PTR(o);
 }
 
@@ -1295,13 +1236,7 @@ static void super_attr(mp_obj_t self_in, qstr attr, mp_obj_t *dest) {
 
     mp_obj_type_t *type = MP_OBJ_TO_PTR(self->type);
 
-    struct class_lookup_data lookup = {
-        .obj = MP_OBJ_TO_PTR(self->obj),
-        .attr = attr,
-        .slot_offset = 0,
-        .dest = dest,
-        .is_type = false,
-    };
+    struct class_lookup_data lookup = {0};      lookup.obj = MP_OBJ_TO_PTR(self->obj); lookup.attr = attr; lookup.slot_offset = 0; lookup.dest = dest; lookup.is_type = false;
 
     // Allow a call super().__init__() to reach any native base classes.
     if (attr == MP_QSTR___init__) {
@@ -1359,7 +1294,7 @@ MP_DEFINE_CONST_OBJ_TYPE(
     );
 
 void mp_load_super_method(qstr attr, mp_obj_t *dest) {
-    mp_obj_super_t super = {{&mp_type_super}, dest[1], dest[2]};
+    mp_obj_super_t super; super.base.type = &mp_type_super; super.type = dest[1]; super.obj = dest[2];
     mp_load_method(MP_OBJ_FROM_PTR(&super), attr, dest);
 }
 
@@ -1468,7 +1403,7 @@ static mp_obj_t static_class_method_make_new(const mp_obj_type_t *self, size_t n
     mp_arg_check_num(n_args, n_kw, 1, 1, false);
 
     mp_obj_static_class_method_t *o = m_new_obj(mp_obj_static_class_method_t);
-    *o = (mp_obj_static_class_method_t) {{self}, args[0]};
+    o->base.type = self; o->fun = args[0];
     return MP_OBJ_FROM_PTR(o);
 }
 

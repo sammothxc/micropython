@@ -253,6 +253,25 @@ static mp_obj_t fun_bc_call(mp_obj_t self_in, size_t n_args, size_t n_kw, const 
         }
         #endif
     }
+    #if MICROPY_NO_ALLOCA
+    // Without a real alloca() the fallback below would take the state from the
+    // heap on every call and leave it for the garbage collector.  A small
+    // state goes in a fixed buffer on the C stack instead, and a big one that
+    // did not fit on the heap above raises MemoryError.  The VM keeps tags in
+    // the low 2 bits of pointers into the state, so it must be aligned to 4
+    // bytes even where the C stack is only aligned to 2 (hence the extra word).
+    mp_uint_t state_buf[(offsetof(mp_code_state_t, state) + VM_MAX_STATE_ON_STACK + sizeof(mp_uint_t) - 1) / sizeof(mp_uint_t) + 1];
+    if (code_state == NULL) {
+        if (state_size > VM_MAX_STATE_ON_STACK) {
+            m_malloc_fail(offsetof(mp_code_state_t, state) + state_size);
+        }
+        code_state = (mp_code_state_t *)((byte *)state_buf + ((uintptr_t)(void *)state_buf & 2));
+        #if MICROPY_DEBUG_VM_STACK_OVERFLOW
+        memset(code_state->state, 0, state_size);
+        #endif
+        state_size = 0; // indicate that the state is not on the heap
+    }
+    #else
     if (code_state == NULL) {
         code_state = alloca(offsetof(mp_code_state_t, state) + state_size);
         #if MICROPY_DEBUG_VM_STACK_OVERFLOW
@@ -260,6 +279,7 @@ static mp_obj_t fun_bc_call(mp_obj_t self_in, size_t n_args, size_t n_kw, const 
         #endif
         state_size = 0; // indicate that we allocated using alloca
     }
+    #endif
     #endif
 
     INIT_CODESTATE(code_state, self, n_state, n_args, n_kw, args);
