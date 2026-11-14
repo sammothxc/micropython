@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# C preprocessor for the ELKS cross build.
+#
+# MicroPython's build preprocesses the sources to collect qstrs, module and
+# root-pointer definitions.  It calls the preprocessor with the compiler's
+# flags and sometimes feeds it from stdin, which Open Watcom cannot do.  This
+# wrapper uses the host cpp instead: it keeps only the -D/-U/-I options and
+# the input files, drops gcc's own predefined macros, and defines the ones
+# Open Watcom sets for 16-bit large model.
+args=()
+for a in "$@"; do
+    case "$a" in
+        -D*|-U*|-I*|-) args+=("$a") ;;
+        -*) ;;
+        *) args+=("$a") ;;
+    esac
+done
+exec gcc -E -w -undef -nostdinc -x c -std=c99 \
+    -D__WATCOMC__=1300 -D__I86__ -D_M_I86 -DM_I86 -D__LARGE__ -D_M_I86LM \
+    -D__ELKS__ -D__FLAT__=0 -U__FLAT__ \
+    "${args[@]}"
