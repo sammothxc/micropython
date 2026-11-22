@@ -28,10 +28,12 @@
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
+#include <limits.h>
 
 #include "py/emitglue.h"
 #include "py/objtype.h"
 #include "py/objfun.h"
+#include "py/smallint.h"
 #include "py/runtime.h"
 #include "py/bc0.h"
 #include "py/profile.h"
@@ -56,8 +58,10 @@
 // top element.
 // Exception stack also grows up, top element is also pointed at.
 
+// The values decoded here are all counts and indices, so a size_t holds them
+// (and is cheaper than an mp_uint_t where that is the wider type).
 #define DECODE_UINT \
-    mp_uint_t unum = 0; \
+    size_t unum = 0; \
     do { \
         unum = (unum << 7) + (*ip & 0x7f); \
     } while ((*ip++ & 0x80) != 0)
@@ -112,6 +116,72 @@
 #define POP() (*sp--)
 #define TOP() (*sp)
 #define SET_TOP(val) *sp = (val)
+
+#if MICROPY_OPT_VM_SMALL_INT_FAST_PATH && (MICROPY_OBJ_REPR == MICROPY_OBJ_REPR_A || MICROPY_OBJ_REPR == MICROPY_OBJ_REPR_B)
+// Do the most common operations on two small ints inline, without calling
+// mp_binary_op.  Anything not handled here (including a result that does not
+// fit a small int) falls through to the code after the macro.  Small ints all
+// carry the same tag in their low bits, so two of them compare the same way
+// tagged as untagged, and/or keep the tag, and an add or subtract can be done
+// tagged if the tag is first taken off one operand: it then overflows the
+// word exactly when the result does not fit a small int.
+#define VM_SMALL_INT_TAG ((mp_uint_t)MP_OBJ_NEW_SMALL_INT(0))
+// A non-negative value that fits an unsigned int, so that division can use the
+// CPU's own instruction where mp_int_t is wider than int (a 16-bit target).
+#define VM_FITS_UINT(v) ((mp_uint_t)(v) <= UINT_MAX)
+#define VM_SMALL_INT_COMPARE(lhs, op, rhs) \
+    SET_TOP(mp_obj_new_bool((mp_int_t)(lhs) op (mp_int_t)(rhs))); \
+    DISPATCH()
+#define VM_BINARY_OP_SMALL_INT_FAST_PATH(op, lhs, rhs) \
+    if (mp_obj_is_small_int(lhs) && mp_obj_is_small_int(rhs)) { \
+        switch (op) { \
+            case MP_BINARY_OP_LESS: \
+                VM_SMALL_INT_COMPARE(lhs, <, rhs); \
+            case MP_BINARY_OP_MORE: \
+                VM_SMALL_INT_COMPARE(lhs, >, rhs); \
+            case MP_BINARY_OP_EQUAL: \
+                VM_SMALL_INT_COMPARE(lhs, ==, rhs); \
+            case MP_BINARY_OP_LESS_EQUAL: \
+                VM_SMALL_INT_COMPARE(lhs, <=, rhs); \
+            case MP_BINARY_OP_MORE_EQUAL: \
+                VM_SMALL_INT_COMPARE(lhs, >=, rhs); \
+            case MP_BINARY_OP_NOT_EQUAL: \
+                VM_SMALL_INT_COMPARE(lhs, !=, rhs); \
+            case MP_BINARY_OP_OR: \
+            case MP_BINARY_OP_INPLACE_OR: \
+                SET_TOP((mp_obj_t)((mp_uint_t)(lhs) | (mp_uint_t)(rhs))); \
+                DISPATCH(); \
+            case MP_BINARY_OP_AND: \
+            case MP_BINARY_OP_INPLACE_AND: \
+                SET_TOP((mp_obj_t)((mp_uint_t)(lhs) & (mp_uint_t)(rhs))); \
+                DISPATCH(); \
+            case MP_BINARY_OP_ADD: \
+            case MP_BINARY_OP_INPLACE_ADD: { \
+                mp_uint_t rhs_val = (mp_uint_t)(rhs) - VM_SMALL_INT_TAG; \
+                mp_uint_t val = (mp_uint_t)(lhs) + rhs_val; \
+                if ((mp_int_t)((val ^ (mp_uint_t)(lhs)) & (val ^ rhs_val)) >= 0) { \
+                    SET_TOP((mp_obj_t)val); \
+                    DISPATCH(); \
+                } \
+                break; \
+            } \
+            case MP_BINARY_OP_SUBTRACT: \
+            case MP_BINARY_OP_INPLACE_SUBTRACT: { \
+                mp_uint_t rhs_val = (mp_uint_t)(rhs) - VM_SMALL_INT_TAG; \
+                mp_uint_t val = (mp_uint_t)(lhs) - rhs_val; \
+                if ((mp_int_t)(((mp_uint_t)(lhs) ^ rhs_val) & ((mp_uint_t)(lhs) ^ val)) >= 0) { \
+                    SET_TOP((mp_obj_t)val); \
+                    DISPATCH(); \
+                } \
+                break; \
+            } \
+            default: \
+                break; \
+        } \
+    }
+#else
+#define VM_BINARY_OP_SMALL_INT_FAST_PATH(op, lhs, rhs)
+#endif
 
 #if MICROPY_PY_SYS_EXC_INFO
 #define CLEAR_SYS_EXC_INFO() MP_STATE_VM(cur_exception) = NULL;
@@ -203,7 +273,7 @@
 //  MP_VM_RETURN_EXCEPTION, exception in state[0]
 mp_vm_return_kind_t MICROPY_WRAP_MP_EXECUTE_BYTECODE(mp_execute_bytecode)(mp_code_state_t *code_state, volatile mp_obj_t inject_exc) {
 
-#define SELECTIVE_EXC_IP (0)
+#define SELECTIVE_EXC_IP (MICROPY_OPT_VM_SELECTIVE_EXC_IP)
 // When disabled, code_state->ip is updated unconditionally during op
 // dispatch, and this is subsequently used in the exception handler
 // (either NLR jump or direct RAISE). This is good for code size because it
@@ -242,6 +312,127 @@ mp_vm_return_kind_t MICROPY_WRAP_MP_EXECUTE_BYTECODE(mp_execute_bytecode)(mp_cod
     #define DISPATCH_WITH_PEND_EXC_CHECK() goto pending_exception_check
     #define ENTRY(op) case op
     #define ENTRY_DEFAULT default
+#endif
+
+#if MICROPY_OPT_COMPUTED_GOTO
+    #define VM_MULTI_OPCODE_ENTRIES (1)
+    #define ENTRY_MULTI(op, cases) ENTRY(op)
+#elif MICROPY_OPT_VM_SWITCH_MULTI_OPCODES
+    // Every opcode of the multi-opcode groups gets its own case label, so the
+    // switch reaches them in one step instead of through a chain of compares.
+    #define VM_MULTI_OPCODE_ENTRIES (1)
+    #define ENTRY_MULTI(op, cases) cases(op)
+    #define VM_CASE_4(op) case (op): case (op) + 1: case (op) + 2: case (op) + 3
+    #define VM_CASE_16(op) VM_CASE_4(op): VM_CASE_4((op) + 4): VM_CASE_4((op) + 8): VM_CASE_4((op) + 12)
+    #define VM_CASES_SMALL_INT(op) VM_CASE_16(op): VM_CASE_16((op) + 16): VM_CASE_16((op) + 32): VM_CASE_16((op) + 48)
+    #define VM_CASES_UNARY_OP(op) VM_CASE_4(op)
+    #define VM_CASES_BINARY_OP(op) VM_CASE_16(op): VM_CASE_16((op) + 16): case (op) + 32: case (op) + 33: case (op) + 34
+    #define VM_EXPAND_16(m, b) m((b) + 0) m((b) + 1) m((b) + 2) m((b) + 3) m((b) + 4) m((b) + 5) m((b) + 6) m((b) + 7) \
+    m((b) + 8) m((b) + 9) m((b) + 10) m((b) + 11) m((b) + 12) m((b) + 13) m((b) + 14) m((b) + 15)
+    #define VM_EXPAND_64(m, b) VM_EXPAND_16(m, (b)) VM_EXPAND_16(m, (b) + 16) VM_EXPAND_16(m, (b) + 32) VM_EXPAND_16(m, (b) + 48)
+    #define VM_CASE_LOAD_CONST_SMALL_INT(n) \
+    case MP_BC_LOAD_CONST_SMALL_INT_MULTI + (n): \
+        PUSH(MP_OBJ_NEW_SMALL_INT((mp_int_t)(n) - MP_BC_LOAD_CONST_SMALL_INT_MULTI_EXCESS)); \
+        DISPATCH();
+    #define VM_CASE_LOAD_FAST(n) \
+    case MP_BC_LOAD_FAST_MULTI + (n): { \
+        mp_obj_t obj = fastn[-(n)]; \
+        if (obj == MP_OBJ_NULL) { \
+            goto local_name_error; \
+        } \
+        PUSH(obj); \
+        DISPATCH(); \
+    }
+    #define VM_CASE_STORE_FAST(n) \
+    case MP_BC_STORE_FAST_MULTI + (n): \
+        fastn[-(n)] = POP(); \
+        DISPATCH();
+    #if MICROPY_OPT_VM_SMALL_INT_FAST_PATH && (MICROPY_OBJ_REPR == MICROPY_OBJ_REPR_A || MICROPY_OBJ_REPR == MICROPY_OBJ_REPR_B)
+    // Small-int operands are handled inline, anything else (including a result
+    // that does not fit a small int) goes to binary_op_slow.  See
+    // VM_BINARY_OP_SMALL_INT_FAST_PATH for the tagged arithmetic.
+    //
+    // The tag test only looks at the low bits, as an unsigned int, which is
+    // cheaper than a full mp_uint_t where that is wider.
+    #if MICROPY_OBJ_REPR == MICROPY_OBJ_REPR_A
+    #define VM_IS_SMALL_INT(o) (((unsigned int)(mp_uint_t)(o) & 1) != 0)
+    #else
+    #define VM_IS_SMALL_INT(o) (((unsigned int)(mp_uint_t)(o) & 3) == 1)
+    #endif
+    // True if a tagged small int is within half the small-int range, so that
+    // adding or subtracting two of them cannot overflow.
+    // Only the top 16 bits are needed for that test.
+    #define VM_SMALL_INT_HALF(o) ((uint16_t)((uint16_t)((mp_uint_t)(o) >> (sizeof(mp_uint_t) * 8 - 16)) + 0x4000u) < 0x8000u)
+    #define VM_BINOP_BEGIN(op) \
+    case MP_BC_BINARY_OP_MULTI + (op): { \
+        mp_obj_t rhs = POP(); \
+        mp_obj_t lhs = TOP(); \
+        if (VM_IS_SMALL_INT(lhs) && VM_IS_SMALL_INT(rhs)) {
+    #define VM_BINOP_END(op) \
+        } \
+        vm_binary_op = (op); \
+        goto binary_op_slow; \
+    }
+    #define VM_CASE_BINOP_CMP(op, cop) \
+    VM_BINOP_BEGIN(op) \
+        SET_TOP((mp_int_t)(lhs) cop (mp_int_t)(rhs) ? mp_const_true : mp_const_false); \
+        DISPATCH(); \
+    VM_BINOP_END(op)
+    #define VM_CASE_BINOP_BITS(op, cop) \
+    VM_BINOP_BEGIN(op) \
+        SET_TOP((mp_obj_t)((mp_uint_t)(lhs) cop (mp_uint_t)(rhs))); \
+        DISPATCH(); \
+    VM_BINOP_END(op)
+    #define VM_CASE_BINOP_ADD(op) \
+    VM_BINOP_BEGIN(op) \
+        if (VM_SMALL_INT_HALF(lhs) && VM_SMALL_INT_HALF(rhs)) { \
+            SET_TOP((mp_obj_t)((mp_uint_t)(lhs) + ((mp_uint_t)(rhs) - VM_SMALL_INT_TAG))); \
+            DISPATCH(); \
+        } \
+    VM_BINOP_END(op)
+    #define VM_CASE_BINOP_SUB(op) \
+    VM_BINOP_BEGIN(op) \
+        if (VM_SMALL_INT_HALF(lhs) && VM_SMALL_INT_HALF(rhs)) { \
+            SET_TOP((mp_obj_t)((mp_uint_t)(lhs) - ((mp_uint_t)(rhs) - VM_SMALL_INT_TAG))); \
+            DISPATCH(); \
+        } \
+    VM_BINOP_END(op)
+    // Python and C agree on % and // when neither operand is negative.
+    #define VM_CASE_BINOP_DIVMOD(op, cop) \
+    VM_BINOP_BEGIN(op) \
+        mp_int_t lhs_val = MP_OBJ_SMALL_INT_VALUE(lhs); \
+        mp_int_t rhs_val = MP_OBJ_SMALL_INT_VALUE(rhs); \
+        if (lhs_val >= 0 && rhs_val > 0) { \
+            if (VM_FITS_UINT(lhs_val) && VM_FITS_UINT(rhs_val)) { \
+                lhs_val = (unsigned int)lhs_val cop (unsigned int)rhs_val; \
+            } else { \
+                lhs_val = lhs_val cop rhs_val; \
+            } \
+            SET_TOP(MP_OBJ_NEW_SMALL_INT(lhs_val)); \
+            DISPATCH(); \
+        } \
+    VM_BINOP_END(op)
+    #else
+    #define VM_CASE_BINOP_GENERIC(op) \
+    case MP_BC_BINARY_OP_MULTI + (op): \
+        vm_binary_op = (op); \
+        sp--; \
+        goto binary_op_slow;
+    #define VM_CASE_BINOP_CMP(op, cop) VM_CASE_BINOP_GENERIC(op)
+    #define VM_CASE_BINOP_BITS(op, cop) VM_CASE_BINOP_GENERIC(op)
+    #define VM_CASE_BINOP_ADD(op) VM_CASE_BINOP_GENERIC(op)
+    #define VM_CASE_BINOP_SUB(op) VM_CASE_BINOP_GENERIC(op)
+    #define VM_CASE_BINOP_DIVMOD(op, cop) VM_CASE_BINOP_GENERIC(op)
+    #endif
+    #define VM_CASE_BINOP_OTHER(op) case MP_BC_BINARY_OP_MULTI + (op):
+    #define VM_CASE_UNUSED(n) case (n):
+    MP_STATIC_ASSERT(MP_BC_LOAD_CONST_SMALL_INT_MULTI_NUM == 64);
+    MP_STATIC_ASSERT(MP_BC_LOAD_FAST_MULTI_NUM == 16);
+    MP_STATIC_ASSERT(MP_BC_STORE_FAST_MULTI_NUM == 16);
+    MP_STATIC_ASSERT(MP_BC_UNARY_OP_MULTI_NUM == 4);
+    MP_STATIC_ASSERT(MP_BC_BINARY_OP_MULTI_NUM == 35);
+#else
+    #define VM_MULTI_OPCODE_ENTRIES (0)
 #endif
 
     // nlr_raise needs to be implemented as a goto, so that the C compiler's flow analyser
@@ -296,6 +487,9 @@ outer_dispatch_loop:
             const qstr_short_t *qstr_table = code_state->fun_bc->context->constants.qstr_table;
             #endif
             mp_obj_t obj_shared;
+            #if VM_MULTI_OPCODE_ENTRIES && !MICROPY_OPT_COMPUTED_GOTO
+            mp_binary_op_t vm_binary_op;
+            #endif
             MICROPY_VM_HOOK_INIT
 
             // If we have exception to inject, now that we finish setting up
@@ -572,22 +766,51 @@ dispatch_loop:
                 }
 
                 ENTRY(MP_BC_POP_JUMP_IF_TRUE): {
+                    mp_obj_t cond = POP();
+                    bool is_true;
+                    #if MICROPY_OPT_VM_SMALL_INT_FAST_PATH
+                    // The bool constants are by far the most common case.
+                    if (cond == mp_const_true) {
+                        is_true = true;
+                    } else if (cond == mp_const_false) {
+                        is_true = false;
+                    } else
+                    #endif
+                    {
+                        MARK_EXC_IP_SELECTIVE();
+                        is_true = mp_obj_is_true(cond);
+                    }
                     DECODE_SLABEL;
-                    if (mp_obj_is_true(POP())) {
+                    if (is_true) {
                         ip += slab;
                     }
                     DISPATCH_WITH_PEND_EXC_CHECK();
                 }
 
                 ENTRY(MP_BC_POP_JUMP_IF_FALSE): {
+                    mp_obj_t cond = POP();
+                    bool is_true;
+                    #if MICROPY_OPT_VM_SMALL_INT_FAST_PATH
+                    // The bool constants are by far the most common case.
+                    if (cond == mp_const_true) {
+                        is_true = true;
+                    } else if (cond == mp_const_false) {
+                        is_true = false;
+                    } else
+                    #endif
+                    {
+                        MARK_EXC_IP_SELECTIVE();
+                        is_true = mp_obj_is_true(cond);
+                    }
                     DECODE_SLABEL;
-                    if (!mp_obj_is_true(POP())) {
+                    if (!is_true) {
                         ip += slab;
                     }
                     DISPATCH_WITH_PEND_EXC_CHECK();
                 }
 
                 ENTRY(MP_BC_JUMP_IF_TRUE_OR_POP): {
+                    MARK_EXC_IP_SELECTIVE();
                     DECODE_ULABEL;
                     if (mp_obj_is_true(TOP())) {
                         ip += ulab;
@@ -598,6 +821,7 @@ dispatch_loop:
                 }
 
                 ENTRY(MP_BC_JUMP_IF_FALSE_OR_POP): {
+                    MARK_EXC_IP_SELECTIVE();
                     DECODE_ULABEL;
                     if (mp_obj_is_true(TOP())) {
                         sp--;
@@ -904,12 +1128,14 @@ unwind_jump:;
                 }
 
                 ENTRY(MP_BC_MAKE_FUNCTION): {
+                    MARK_EXC_IP_SELECTIVE();
                     DECODE_PTR;
                     PUSH(mp_make_function_from_proto_fun(ptr, code_state->fun_bc->context, NULL));
                     DISPATCH();
                 }
 
                 ENTRY(MP_BC_MAKE_FUNCTION_DEFARGS): {
+                    MARK_EXC_IP_SELECTIVE();
                     DECODE_PTR;
                     // Stack layout: def_tuple def_dict <- TOS
                     sp -= 1;
@@ -918,6 +1144,7 @@ unwind_jump:;
                 }
 
                 ENTRY(MP_BC_MAKE_CLOSURE): {
+                    MARK_EXC_IP_SELECTIVE();
                     DECODE_PTR;
                     size_t n_closed_over = *ip++;
                     // Stack layout: closed_overs <- TOS
@@ -927,6 +1154,7 @@ unwind_jump:;
                 }
 
                 ENTRY(MP_BC_MAKE_CLOSURE_DEFARGS): {
+                    MARK_EXC_IP_SELECTIVE();
                     DECODE_PTR;
                     size_t n_closed_over = *ip++;
                     // Stack layout: def_tuple def_dict closed_overs <- TOS
@@ -1274,28 +1502,93 @@ yield:
                     mp_import_all(POP());
                     DISPATCH();
 
-                #if MICROPY_OPT_COMPUTED_GOTO
-                ENTRY(MP_BC_LOAD_CONST_SMALL_INT_MULTI):
-                    PUSH(MP_OBJ_NEW_SMALL_INT((mp_int_t)ip[-1] - MP_BC_LOAD_CONST_SMALL_INT_MULTI - MP_BC_LOAD_CONST_SMALL_INT_MULTI_EXCESS));
+                #if VM_MULTI_OPCODE_ENTRIES && !MICROPY_OPT_COMPUTED_GOTO
+                // One case per opcode value, with the operand as a constant:
+                // nothing has to be decoded from the opcode at run time.
+                VM_EXPAND_64(VM_CASE_LOAD_CONST_SMALL_INT, 0)
+                VM_EXPAND_16(VM_CASE_LOAD_FAST, 0)
+                VM_EXPAND_16(VM_CASE_STORE_FAST, 0)
+                // The common binary operations, with small ints done inline.
+                VM_CASE_BINOP_CMP(MP_BINARY_OP_LESS, <)
+                VM_CASE_BINOP_CMP(MP_BINARY_OP_MORE, >)
+                VM_CASE_BINOP_CMP(MP_BINARY_OP_EQUAL, ==)
+                VM_CASE_BINOP_CMP(MP_BINARY_OP_LESS_EQUAL, <=)
+                VM_CASE_BINOP_CMP(MP_BINARY_OP_MORE_EQUAL, >=)
+                VM_CASE_BINOP_CMP(MP_BINARY_OP_NOT_EQUAL, !=)
+                VM_CASE_BINOP_ADD(MP_BINARY_OP_ADD)
+                VM_CASE_BINOP_ADD(MP_BINARY_OP_INPLACE_ADD)
+                VM_CASE_BINOP_SUB(MP_BINARY_OP_SUBTRACT)
+                VM_CASE_BINOP_SUB(MP_BINARY_OP_INPLACE_SUBTRACT)
+                VM_CASE_BINOP_BITS(MP_BINARY_OP_AND, &)
+                VM_CASE_BINOP_BITS(MP_BINARY_OP_INPLACE_AND, &)
+                VM_CASE_BINOP_BITS(MP_BINARY_OP_OR, |)
+                VM_CASE_BINOP_BITS(MP_BINARY_OP_INPLACE_OR, |)
+                VM_CASE_BINOP_DIVMOD(MP_BINARY_OP_MODULO, %)
+                VM_CASE_BINOP_DIVMOD(MP_BINARY_OP_INPLACE_MODULO, %)
+                VM_CASE_BINOP_DIVMOD(MP_BINARY_OP_FLOOR_DIVIDE, /)
+                VM_CASE_BINOP_DIVMOD(MP_BINARY_OP_INPLACE_FLOOR_DIVIDE, /)
+
+                // All other binary operations.
+                VM_CASE_BINOP_OTHER(MP_BINARY_OP_IN)
+                VM_CASE_BINOP_OTHER(MP_BINARY_OP_IS)
+                VM_CASE_BINOP_OTHER(MP_BINARY_OP_EXCEPTION_MATCH)
+                VM_CASE_BINOP_OTHER(MP_BINARY_OP_INPLACE_XOR)
+                VM_CASE_BINOP_OTHER(MP_BINARY_OP_INPLACE_LSHIFT)
+                VM_CASE_BINOP_OTHER(MP_BINARY_OP_INPLACE_RSHIFT)
+                VM_CASE_BINOP_OTHER(MP_BINARY_OP_INPLACE_MULTIPLY)
+                VM_CASE_BINOP_OTHER(MP_BINARY_OP_INPLACE_MAT_MULTIPLY)
+                VM_CASE_BINOP_OTHER(MP_BINARY_OP_INPLACE_TRUE_DIVIDE)
+                VM_CASE_BINOP_OTHER(MP_BINARY_OP_INPLACE_POWER)
+                VM_CASE_BINOP_OTHER(MP_BINARY_OP_XOR)
+                VM_CASE_BINOP_OTHER(MP_BINARY_OP_LSHIFT)
+                VM_CASE_BINOP_OTHER(MP_BINARY_OP_RSHIFT)
+                VM_CASE_BINOP_OTHER(MP_BINARY_OP_MULTIPLY)
+                VM_CASE_BINOP_OTHER(MP_BINARY_OP_MAT_MULTIPLY)
+                VM_CASE_BINOP_OTHER(MP_BINARY_OP_TRUE_DIVIDE)
+                VM_CASE_BINOP_OTHER(MP_BINARY_OP_POWER)
+                    vm_binary_op = ip[-1] - MP_BC_BINARY_OP_MULTI;
+                    sp--;
+                binary_op_slow:
+                    // The right operand is still at sp[1].
+                    MARK_EXC_IP_SELECTIVE();
+                    SET_TOP(mp_binary_op(vm_binary_op, TOP(), sp[1]));
                     DISPATCH();
 
-                ENTRY(MP_BC_LOAD_FAST_MULTI):
-                    obj_shared = fastn[MP_BC_LOAD_FAST_MULTI - (mp_int_t)ip[-1]];
-                    goto load_check;
-
-                ENTRY(MP_BC_STORE_FAST_MULTI):
-                    fastn[MP_BC_STORE_FAST_MULTI - (mp_int_t)ip[-1]] = POP();
-                    DISPATCH();
-
-                ENTRY(MP_BC_UNARY_OP_MULTI):
+                ENTRY_MULTI(MP_BC_UNARY_OP_MULTI, VM_CASES_UNARY_OP):
                     MARK_EXC_IP_SELECTIVE();
                     SET_TOP(mp_unary_op(ip[-1] - MP_BC_UNARY_OP_MULTI, TOP()));
                     DISPATCH();
 
-                ENTRY(MP_BC_BINARY_OP_MULTI): {
+                // Byte values outside the range of opcodes: with a case for
+                // every value the switch needs no range check.
+                VM_EXPAND_16(VM_CASE_UNUSED, 0)
+                VM_CASE_UNUSED(0xfa) VM_CASE_UNUSED(0xfb) VM_CASE_UNUSED(0xfc)
+                VM_CASE_UNUSED(0xfd) VM_CASE_UNUSED(0xfe) VM_CASE_UNUSED(0xff)
+                ENTRY_DEFAULT:
                     MARK_EXC_IP_SELECTIVE();
+                #elif VM_MULTI_OPCODE_ENTRIES
+                ENTRY_MULTI(MP_BC_LOAD_CONST_SMALL_INT_MULTI, VM_CASES_SMALL_INT):
+                    PUSH(MP_OBJ_NEW_SMALL_INT((mp_int_t)ip[-1] - MP_BC_LOAD_CONST_SMALL_INT_MULTI - MP_BC_LOAD_CONST_SMALL_INT_MULTI_EXCESS));
+                    DISPATCH();
+
+                ENTRY_MULTI(MP_BC_LOAD_FAST_MULTI, VM_CASE_16):
+                    obj_shared = fastn[MP_BC_LOAD_FAST_MULTI - (mp_int_t)ip[-1]];
+                    goto load_check;
+
+                ENTRY_MULTI(MP_BC_STORE_FAST_MULTI, VM_CASE_16):
+                    fastn[MP_BC_STORE_FAST_MULTI - (mp_int_t)ip[-1]] = POP();
+                    DISPATCH();
+
+                ENTRY_MULTI(MP_BC_UNARY_OP_MULTI, VM_CASES_UNARY_OP):
+                    MARK_EXC_IP_SELECTIVE();
+                    SET_TOP(mp_unary_op(ip[-1] - MP_BC_UNARY_OP_MULTI, TOP()));
+                    DISPATCH();
+
+                ENTRY_MULTI(MP_BC_BINARY_OP_MULTI, VM_CASES_BINARY_OP): {
                     mp_obj_t rhs = POP();
                     mp_obj_t lhs = TOP();
+                    VM_BINARY_OP_SMALL_INT_FAST_PATH(ip[-1] - MP_BC_BINARY_OP_MULTI, lhs, rhs)
+                    MARK_EXC_IP_SELECTIVE();
                     SET_TOP(mp_binary_op(ip[-1] - MP_BC_BINARY_OP_MULTI, lhs, rhs));
                     DISPATCH();
                 }
@@ -1314,15 +1607,18 @@ yield:
                         fastn[MP_BC_STORE_FAST_MULTI - (mp_int_t)ip[-1]] = POP();
                         DISPATCH();
                     } else if (ip[-1] < MP_BC_UNARY_OP_MULTI + MP_BC_UNARY_OP_MULTI_NUM) {
+                        MARK_EXC_IP_SELECTIVE();
                         SET_TOP(mp_unary_op(ip[-1] - MP_BC_UNARY_OP_MULTI, TOP()));
                         DISPATCH();
                     } else if (ip[-1] < MP_BC_BINARY_OP_MULTI + MP_BC_BINARY_OP_MULTI_NUM) {
                         mp_obj_t rhs = POP();
                         mp_obj_t lhs = TOP();
+                        VM_BINARY_OP_SMALL_INT_FAST_PATH(ip[-1] - MP_BC_BINARY_OP_MULTI, lhs, rhs)
+                        MARK_EXC_IP_SELECTIVE();
                         SET_TOP(mp_binary_op(ip[-1] - MP_BC_BINARY_OP_MULTI, lhs, rhs));
                         DISPATCH();
                     } else
-                #endif // MICROPY_OPT_COMPUTED_GOTO
+                #endif // VM_MULTI_OPCODE_ENTRIES
                 {
                     mp_obj_t obj = mp_obj_new_exception_msg(&mp_type_NotImplementedError, MP_ERROR_TEXT("opcode"));
                     nlr_pop();

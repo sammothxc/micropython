@@ -53,8 +53,6 @@
 #define MAP_CACHE_OFFSET(index) ((((uintptr_t)(index)) >> 2) % MICROPY_OPT_MAP_LOOKUP_CACHE_SIZE)
 // Gets the map cache entry for the corresponding index.
 #define MAP_CACHE_ENTRY(index) (MP_STATE_VM(map_lookup_cache)[MAP_CACHE_OFFSET(index)])
-// Retrieve the mp_obj_t at the location suggested by the cache.
-#define MAP_CACHE_GET(map, index) (&(map)->table[MAP_CACHE_ENTRY(index) % (map)->alloc])
 // Update the cache for this index.
 #define MAP_CACHE_SET(index, pos) MAP_CACHE_ENTRY(index) = (pos) & 0xff;
 #else
@@ -159,12 +157,17 @@ mp_map_elem_t *MICROPY_WRAP_MP_MAP_LOOKUP(mp_map_lookup)(mp_map_t * map, mp_obj_
 
     #if MICROPY_OPT_MAP_LOOKUP_CACHE
     // Try the cache for lookup or add-if-not-found.
-    if (lookup_kind != MP_MAP_LOOKUP_REMOVE_IF_FOUND && map->alloc) {
-        mp_map_elem_t *slot = MAP_CACHE_GET(map, index);
-        // Note: Just comparing key for value equality will have false negatives, but
-        // these will be handled by the regular path below.
-        if (slot->key == index) {
-            return slot;
+    if (lookup_kind != MP_MAP_LOOKUP_REMOVE_IF_FOUND) {
+        // A cached position that is outside this map was recorded for another
+        // map, so it is a miss (checking that also avoids a division).
+        size_t cached_pos = MAP_CACHE_ENTRY(index);
+        if (cached_pos < map->alloc) {
+            mp_map_elem_t *slot = &map->table[cached_pos];
+            // Note: Just comparing key for value equality will have false negatives, but
+            // these will be handled by the regular path below.
+            if (slot->key == index) {
+                return slot;
+            }
         }
     }
     #endif
@@ -249,7 +252,10 @@ mp_map_elem_t *MICROPY_WRAP_MP_MAP_LOOKUP(mp_map_lookup)(mp_map_t * map, mp_obj_
         hash = MP_OBJ_SMALL_INT_VALUE(mp_unary_op(MP_UNARY_OP_HASH, index));
     }
 
-    size_t pos = hash % map->alloc;
+    // The hash is cut down to a size_t before the modulo: on a target where
+    // size_t is narrower than mp_uint_t that avoids a wide division, and the
+    // low bits are just as good a hash.
+    size_t pos = (size_t)hash % map->alloc;
     size_t start_pos = pos;
     mp_map_elem_t *avail_slot = NULL;
     for (;;) {
@@ -294,7 +300,9 @@ mp_map_elem_t *MICROPY_WRAP_MP_MAP_LOOKUP(mp_map_lookup)(mp_map_t * map, mp_obj_
         }
 
         // not yet found, keep searching in this table
-        pos = (pos + 1) % map->alloc;
+        if (++pos == map->alloc) {
+            pos = 0;
+        }
 
         if (pos == start_pos) {
             // search got back to starting position, so index is not in table
@@ -312,7 +320,7 @@ mp_map_elem_t *MICROPY_WRAP_MP_MAP_LOOKUP(mp_map_lookup)(mp_map_t * map, mp_obj_
                     // not enough room in table, rehash it
                     mp_map_rehash(map);
                     // restart the search for the new element
-                    start_pos = pos = hash % map->alloc;
+                    start_pos = pos = (size_t)hash % map->alloc;
                 }
             } else {
                 return NULL;
@@ -358,7 +366,7 @@ mp_obj_t mp_set_lookup(mp_set_t *set, mp_obj_t index, mp_map_lookup_kind_t looku
         }
     }
     mp_uint_t hash = MP_OBJ_SMALL_INT_VALUE(mp_unary_op(MP_UNARY_OP_HASH, index));
-    size_t pos = hash % set->alloc;
+    size_t pos = (size_t)hash % set->alloc;
     size_t start_pos = pos;
     mp_obj_t *avail_slot = NULL;
     for (;;) {
@@ -396,7 +404,9 @@ mp_obj_t mp_set_lookup(mp_set_t *set, mp_obj_t index, mp_map_lookup_kind_t looku
         }
 
         // not yet found, keep searching in this table
-        pos = (pos + 1) % set->alloc;
+        if (++pos == set->alloc) {
+            pos = 0;
+        }
 
         if (pos == start_pos) {
             // search got back to starting position, so index is not in table
@@ -410,7 +420,7 @@ mp_obj_t mp_set_lookup(mp_set_t *set, mp_obj_t index, mp_map_lookup_kind_t looku
                     // not enough room in table, rehash it
                     mp_set_rehash(set);
                     // restart the search for the new element
-                    start_pos = pos = hash % set->alloc;
+                    start_pos = pos = (size_t)hash % set->alloc;
                 }
             } else {
                 return MP_OBJ_NULL;

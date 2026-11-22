@@ -17,6 +17,14 @@
 #define MICROPY_REPL_AUTO_INDENT (1)
 #define MICROPY_ENABLE_EXTERNAL_IMPORT (1)
 #define MICROPY_READER_POSIX (1)
+// A system call is expensive on an 8088, so read source files a block at a time.
+#define MICROPY_READER_POSIX_BUF_SIZE (512)
+// Run and import .mpy files precompiled on another machine with
+//   mpy-cross -msmall-int-bits=30 file.py
+// Loading one skips the parser and compiler, which are slow on an 8088.
+#ifndef MICROPY_PERSISTENT_CODE_LOAD
+#define MICROPY_PERSISTENT_CODE_LOAD (1)
+#endif
 #define MICROPY_ENABLE_SOURCE_LINE (1)
 #define MICROPY_ERROR_REPORTING (MICROPY_ERROR_REPORTING_NORMAL)
 #define MICROPY_ROM_TEXT_COMPRESSION (0)
@@ -26,6 +34,13 @@
 #define MICROPY_CPYTHON_COMPAT (1)
 #define MICROPY_ALLOC_PATH_MAX (128)
 #define MICROPY_ALLOC_PARSE_CHUNK_INIT (16)
+
+// Speed options that matter on an 8088: a cache of where names were last found
+// in dicts (128 bytes), and small-int arithmetic done inline in the VM.
+#define MICROPY_OPT_MAP_LOOKUP_CACHE (1)
+#define MICROPY_OPT_VM_SMALL_INT_FAST_PATH (1)
+#define MICROPY_OPT_VM_SELECTIVE_EXC_IP (1)
+#define MICROPY_OPT_VM_SWITCH_MULTI_OPCODES (1)
 
 #define MICROPY_LONGINT_IMPL (MICROPY_LONGINT_IMPL_MPZ)
 #ifndef MICROPY_ELKS_FLOAT

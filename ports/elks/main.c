@@ -17,6 +17,8 @@
 
 #include "py/builtin.h"
 #include "py/compile.h"
+#include "py/persistentcode.h"
+#include "py/emitglue.h"
 #include "py/gc.h"
 #include "py/lexer.h"
 #include "py/mperrno.h"
@@ -98,17 +100,33 @@ static int execute(const char *src, int is_file) {
         qstr source_name;
         mp_parse_tree_t parse_tree;
         mp_obj_t module_fun;
-        if (is_file) {
-            lex = mp_lexer_new_from_file(qstr_from_str(src));
-        } else {
-            lex = mp_lexer_new_from_str_len(MP_QSTR__lt_stdin_gt_, src, strlen(src), 0);
-        }
-        source_name = lex->source_name;
-        if (is_file) {
+        size_t len = strlen(src);
+        #if MICROPY_PERSISTENT_CODE_LOAD
+        if (is_file && len > 4 && strcmp(src + len - 4, ".mpy") == 0) {
+            // A file precompiled with mpy-cross: nothing to parse or compile.
+            mp_compiled_module_t cm;
+            mp_module_context_t *context = m_new_obj(mp_module_context_t);
+            context->module.globals = mp_globals_get();
+            cm.context = context;
+            source_name = qstr_from_str(src);
             mp_store_global(MP_QSTR___file__, MP_OBJ_NEW_QSTR(source_name));
+            mp_raw_code_load_file(source_name, &cm);
+            module_fun = mp_make_function_from_proto_fun(cm.rc, cm.context, NULL);
+        } else
+        #endif
+        {
+            if (is_file) {
+                lex = mp_lexer_new_from_file(qstr_from_str(src));
+            } else {
+                lex = mp_lexer_new_from_str_len(MP_QSTR__lt_stdin_gt_, src, len, 0);
+            }
+            source_name = lex->source_name;
+            if (is_file) {
+                mp_store_global(MP_QSTR___file__, MP_OBJ_NEW_QSTR(source_name));
+            }
+            parse_tree = mp_parse(lex, MP_PARSE_FILE_INPUT);
+            module_fun = mp_compile(&parse_tree, source_name, false);
         }
-        parse_tree = mp_parse(lex, MP_PARSE_FILE_INPUT);
-        module_fun = mp_compile(&parse_tree, source_name, false);
         mp_call_function_0(module_fun);
         mp_handle_pending(true);
         nlr_pop();
@@ -136,7 +154,7 @@ static int execute(const char *src, int is_file) {
 
 static void usage(void) {
     static const char text[] =
-        "usage: micropython [-c command | file] [arg ...]\n";
+        "usage: micropython [-c command | file.py | file.mpy] [arg ...]\n";
     write(2, text, sizeof(text) - 1);
 }
 

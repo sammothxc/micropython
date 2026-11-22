@@ -209,8 +209,14 @@ static const char *const rule_name_table[] = {
 // *FORMAT-ON*
 
 typedef struct _rule_stack_t {
+    #if MP_SSIZE_MAX <= 0x7fff
+    // With a 16-bit size_t a bit-field would leave only 8 bits for the line.
+    size_t src_line;
+    uint8_t rule_id;
+    #else
     size_t src_line : (8 * sizeof(size_t) - 8); // maximum bits storing source line number
     size_t rule_id : 8; // this must be large enough to fit largest rule number
+    #endif
     size_t arg_i; // this dictates the maximum nodes in a "list" of things
 } rule_stack_t;
 
@@ -1006,7 +1012,8 @@ static void push_result_rule(parser_t *parser, size_t src_line, uint8_t rule_id,
 
     mp_parse_node_struct_t *pn = parser_alloc(parser, sizeof(mp_parse_node_struct_t) + sizeof(mp_parse_node_t) * num_args);
     pn->source_line = src_line;
-    pn->kind_num_nodes = (rule_id & 0xff) | (num_args << 8);
+    // The cast matters where size_t is 16 bits: num_args can be 256 or more.
+    pn->kind_num_nodes = (rule_id & 0xff) | ((uint32_t)num_args << 8);
     for (size_t i = num_args; i > 0; i--) {
         pn->nodes[i - 1] = pop_result(parser);
     }

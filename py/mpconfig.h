@@ -560,6 +560,28 @@
 #define MICROPY_OPT_MAP_LOOKUP_CACHE (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EXTRA_FEATURES)
 #endif
 
+// Whether the VM does the most common operations on two small ints (compare,
+// add, subtract, bitwise) inline instead of calling mp_binary_op, and checks
+// for the bool constants inline in conditional jumps.  Costs some code size.
+#ifndef MICROPY_OPT_VM_SMALL_INT_FAST_PATH
+#define MICROPY_OPT_VM_SMALL_INT_FAST_PATH (0)
+#endif
+
+// Whether the VM saves the bytecode position (needed if an exception is
+// raised) only in those opcodes that can raise, instead of before every opcode.
+// Faster, at the cost of some code size.
+#ifndef MICROPY_OPT_VM_SELECTIVE_EXC_IP
+#define MICROPY_OPT_VM_SELECTIVE_EXC_IP (0)
+#endif
+
+// Whether the VM's switch statement (used when computed goto is not available)
+// has a case label for every opcode of the multi-opcode groups (load/store of
+// a fast local, small int constant, unary and binary op).  Faster where the
+// compiler turns the switch into a jump table, at the cost of a bigger table.
+#ifndef MICROPY_OPT_VM_SWITCH_MULTI_OPCODES
+#define MICROPY_OPT_VM_SWITCH_MULTI_OPCODES (0)
+#endif
+
 // How much RAM (in bytes) to use for the map lookup cache.
 #ifndef MICROPY_OPT_MAP_LOOKUP_CACHE_SIZE
 #define MICROPY_OPT_MAP_LOOKUP_CACHE_SIZE (128)
@@ -596,6 +618,12 @@
 // Whether to use the POSIX reader for importing files
 #ifndef MICROPY_READER_POSIX
 #define MICROPY_READER_POSIX (0)
+#endif
+
+// Size in bytes of the buffer the POSIX reader reads a file through.  It is
+// on the heap while a file is being compiled; each refill is one read() call.
+#ifndef MICROPY_READER_POSIX_BUF_SIZE
+#define MICROPY_READER_POSIX_BUF_SIZE (20)
 #endif
 
 // Whether to use the VFS reader for importing files

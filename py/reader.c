@@ -78,7 +78,7 @@ typedef struct _mp_reader_posix_t {
     int fd;
     size_t len;
     size_t pos;
-    byte buf[20];
+    byte buf[MICROPY_READER_POSIX_BUF_SIZE];
 } mp_reader_posix_t;
 
 static mp_uint_t mp_reader_posix_readbyte(void *data) {

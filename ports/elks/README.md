@@ -7,9 +7,10 @@ the MS-DOS port by ARMoir.
 
     micropython              interactive REPL (Ctrl-D exits)
     micropython script.py    run a file
+    micropython script.mpy   run a file precompiled with mpy-cross
     micropython -c "code"    run a string
 
-Status: runs under QEMU.  It has not been run on real hardware yet.
+Status: runs on a Compaq Portable (4.77 MHz 8088) and under QEMU.
 
 ## Building
 
@@ -32,7 +33,7 @@ Requirements:
 
 Then:
 
-    make            # build/micropython, about 220 KB
+    make            # build/micropython, about 225 KB
     make HOST=1     # build-host/micropython: same port built with the host gcc
 
 The host build exists to test the port layer and to produce reference output
@@ -40,21 +41,31 @@ for comparing against the ELKS build.
 
 ## Testing
 
-`tools/qemu-run.sh script.py` boots a copy of an ELKS disk image in QEMU with
-MicroPython as init and prints the script's output; see the comments at the
-top of that script.
+All of these boot a copy of an ELKS disk image in QEMU (default
+`~/elks-qemu/hd32-fat.img`, or set `ELKS_IMG`):
 
-With that runner, the `tests/basics` and `tests/float` suites were run on ELKS
-and compared with the host build: 589 of 604 tests give identical output.  Of
-the 15 that differ, 9 are expected for a 16-bit target or the feature set
-(2-byte `int` in `array` and `struct`, 30-bit small integers, no `open()`),
-one is an artifact of the serial console, and 5 are the floating-point issues
-listed under "Known limitations".
+- `tools/qemu-run.sh script.py` runs one script, prints its output and exits
+  with its exit status.  With `ICOUNT=1` QEMU's clock counts instructions, so
+  timings are reproducible; code then takes roughly 30 to 35 times as long on
+  a 4.77 MHz 8088.
+- `tools/run-tests.py` runs `tests/basics` and `tests/float` (or the test
+  files given) on ELKS and with the host build, and compares the outputs.
+  589 of 604 tests give identical output.  The 15 that differ are listed in
+  the script with the reason: 2-byte `int` in `array` and `struct`, 30-bit
+  small integers, a feature the port lacks, a `\r` the serial console cannot
+  show, and the floating-point issues under "Known limitations".
+- `tools/bench.py` times common operations:
+  `ICOUNT=1 tools/qemu-run.sh tools/bench.py`.
+
+QEMU is run with `-d nochain`, which works around a QEMU bug (seen in 10.0):
+with chained translation blocks, a near call whose 16-bit target wraps past
+the end of a code segment is not wrapped, so a build can crash in QEMU and
+still run correctly on a real 8086.  See `tools/qemu-run.sh`.
 
 ## How it fits on an 8086
 
 - **Segments.**  The ELKS kernel loads at most `MAX_SEGS` (5) segments per
-  program.  The build has three code segments (about 176 KB) and the
+  program.  The build has three code segments (about 182 KB) and the
   default data segment, which leaves room for one more code segment.  All data
   is kept in the default data segment for that reason (no `-zt`).  `tools/checkmap.py` checks
   the count after linking.
@@ -76,10 +87,41 @@ listed under "Known limitations".
 Compiler and REPL (line editing, history, auto-indent), arbitrary-precision
 integers, floats (software double precision), `str` with Unicode, `bytes`,
 `bytearray`, `array`, `struct`, `collections`, `sys`, `gc`, `micropython`,
-`input()`, importing `.py` files from the script's directory and from
-`/lib/micropython`.
+`input()`, `time` (`time()`, `sleep()`, `sleep_ms()`, `sleep_us()` and the
+`ticks_*()` functions, with the kernel's 10 ms resolution), importing `.py` and
+`.mpy` files from the script's directory and from `/lib/micropython`.
 
-Not enabled yet: `open()` and file I/O, `os`, `time`, `math`, `json`, `re`.
+Not enabled yet: `open()` and file I/O, `os`, `math`, `json`, `re`.
+
+## Speed
+
+Compiling Python source is slow on an 8088: a 220-line module takes about
+52 seconds to import from `.py` on a 4.77 MHz machine, and 1.1 seconds from
+`.mpy`.  Precompile modules (and the main script, if it is large) on another
+machine with `mpy-cross` from this tree:
+
+    make -C ../../mpy-cross
+    ../../mpy-cross/build/mpy-cross -msmall-int-bits=30 module.py
+
+`-msmall-int-bits=30` is required; a `.mpy` built for another integer size is
+rejected with "incompatible .mpy file".  When both `module.py` and
+`module.mpy` exist, `import module` uses the `.py`.
+
+The port enables these speed options (see `mpconfigport.h`), which matter more
+on an 8088 than on other targets:
+
+- `MICROPY_OPT_MAP_LOOKUP_CACHE`: remembers where names were last found.
+- `MICROPY_OPT_VM_SMALL_INT_FAST_PATH`: comparisons, `+`, `-`, `%`, `//`,
+  `&` and `|` on small integers are done in the VM without a call.
+- `MICROPY_OPT_VM_SELECTIVE_EXC_IP`: the VM saves its bytecode position only
+  in opcodes that can raise an exception.
+- `MICROPY_OPT_VM_SWITCH_MULTI_OPCODES`: every opcode value has its own case
+  in the VM's switch, with its operand built in.
+- `MICROPY_READER_POSIX_BUF_SIZE` 512: source files are read a block at a time.
+
+On the Compaq, a build with these options ran the loops of a small benchmark
+1.4 to 2.5 times faster than one without them, and a Python function call
+took 4.2 ms, down from 35 ms before the call-state fix below.
 
 ## Known limitations
 
@@ -95,15 +137,24 @@ Not enabled yet: `open()` and file I/O, `os`, `time`, `math`, `json`, `re`.
   A list grows by doubling, so appending stops at 8,192 items.
 - **Small integers** are 30-bit; larger values become arbitrary-precision
   integers, which allocate on the heap.
-- QEMU runs at host speed.  On a 4.77 MHz 8088 expect everything to be slow,
-  floats especially.
+- **Recursion** is limited to about 50 levels of Python calls by the 16 KB C
+  stack.
 
 ## Changes to the core
 
 `py/` carries the Py86 compatibility patch (Open Watcom C syntax workarounds,
 2-byte-aligned GC scanning, parse-node alignment, 32-bit constant fixes) plus
-four fixes found while testing this port:
+these fixes found while testing this port:
 
+- `py/parse.c`: a parse node with 256 or more children (a module or function
+  body of 256+ statements, a long list or dict literal) lost all but the
+  count modulo 256 where `size_t` is 16 bits, so the rest of the code was
+  silently dropped.  The parser's rule stack also kept only 8 bits of the
+  source line on such targets.
+- `py/objfun.c`, `py/objboundmeth.c`: with `MICROPY_NO_ALLOCA` every Python
+  function call took its state (and every bound-method call its argument
+  array) from the heap and left it for the garbage collector.  They now use a
+  fixed buffer on the C stack when the state is small.
 - `py/mpprint.c`: `%ld` arguments were read as `int` wherever `long` is wider
   than `int` but the model is not LP64.
 - `py/mpz.c`: converting a negative big integer to bytes lost the carry with
@@ -113,3 +164,11 @@ four fixes found while testing this port:
 - `py/misc.h`, `py/malloc.c`: the `m_new`/`m_renew` macros check their size
   arithmetic where `size_t` is 16 bits, so an oversized request raises
   `MemoryError` instead of wrapping around to a small allocation.
+
+and the speed options listed under "Speed", which are off by default:
+`MICROPY_OPT_VM_SMALL_INT_FAST_PATH`, `MICROPY_OPT_VM_SELECTIVE_EXC_IP` and
+`MICROPY_OPT_VM_SWITCH_MULTI_OPCODES` (`py/vm.c`, `py/mpconfig.h`) and
+`MICROPY_READER_POSIX_BUF_SIZE` (`py/reader.c`).  Also changed for speed:
+`py/map.c` reduces hashes to `size_t` before the modulo and uses the lookup
+cache without a division, `py/smallint.c` divides with 16-bit instructions
+when both operands fit, and the VM decodes bytecode operands as `size_t`.

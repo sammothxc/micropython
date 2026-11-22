@@ -100,6 +100,7 @@ LDFLAGS = \
 	-Wl,option -Wl,stack=$(STACK_SIZE) \
 	-Wl,option -Wl,heapsize=$(NEAR_HEAP_SIZE) \
 	-Wl,option -Wl,map=$(MPY).map \
+	-Wl,option -Wl,statics \
 	-Wl,library -Wl,$(ELKS_LIBC)
 
 all: $(MPY)
