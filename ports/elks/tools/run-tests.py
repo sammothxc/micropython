@@ -3,8 +3,9 @@
 
     tools/run-tests.py [-j JOBS] [-t SECONDS] [test.py ...]
 
-Without test files it runs tests/basics/*.py and tests/float/*.py.  Each test
-runs on ELKS (build/micropython, in a copy of an ELKS disk image booted in
+Without test files it runs the tests in tests/basics, tests/float, tests/io
+and tests/extmod (tests of modules the port does not have print SKIP on both
+systems, so they count as matching).  Each test runs on ELKS (build/micropython, in a copy of an ELKS disk image booted in
 QEMU) and with the host build of this port (build-host/micropython, made with
 "make HOST=1"), and the two outputs are compared.  Results go to build-tests/:
 DIR/NAME.elks and DIR/NAME.host for each test, and results.txt with one
@@ -13,8 +14,10 @@ are known to differ; the exit status is 1 if any other test differs.
 
 The disk image boots /bin/sh as init with a script that runs the test and then
 prints an end marker with the exit status, so QEMU is stopped as soon as the
-test finishes.  Only the test file itself is copied to the image, so tests
-that import other files from their directory fail on ELKS.
+test finishes.  The test file is copied to /root on the image, together with
+the data/ directory next to it if there is one, and runs with /root as the
+current directory (the host build runs it in its own directory).  Tests that
+import other files from their directory fail on ELKS.
 
 Environment: ELKS_IMG (default ~/elks-qemu/hd32-fat.img; its kernel must be
 built with CONFIG_EXEC_OS2), MPY and HOST_MPY to test other binaries.
@@ -50,15 +53,22 @@ EXPECTED_DIFF = {
     "basics/int_big_to_small",
     # Feature set: the test needs something the port does not have.
     "basics/sys_path",
+    # The test prints its own file name, which is /root/t.py on ELKS.
+    "io/argv",
     # The test prints a raw '\r', which the serial console cannot pass through.
     "basics/string_upperlow",
+    "extmod/json_loads",
     # Open Watcom's soft-float library: NaN and infinity arithmetic and
-    # comparisons, and the last digits of long decimal numbers.
-    "float/builtin_float_pow",
+    # comparisons, negative zero, and the last digits of long decimal numbers.
+    # (The math functions themselves handle special values, see elks_libm.c,
+    # but math.degrees(), math.radians() and math.log(x, base) do arithmetic
+    # on their results.)
     "float/float1",
     "float/float_parse",
     "float/float_parse_doubleprec",
     "float/inf_nan_arith",
+    "float/math_domain",
+    "float/math_fun",
 }
 
 running = set()
@@ -75,7 +85,7 @@ def make_template(tmp, elks_img, mpy):
     mcopy(tpl, mpy, "::/bin/micropython")
     run_sh = os.path.join(tmp, "run.sh")
     with open(run_sh, "w") as f:
-        f.write('/bin/micropython /root/t.py\necho "%s $?"\n' % END.decode())
+        f.write('cd /root\n/bin/micropython /root/t.py\necho "%s $?"\n' % END.decode())
     mcopy(tpl, run_sh, "::/root/run.sh")
     # /bootopts must start with "##".  A line without "=" is passed to init as
     # an argument.  The file is padded because the kernel reads a fixed block.
@@ -98,6 +108,9 @@ def run_elks(test, tpl, tmp, timeout):
         img = os.path.join(work, "hd.img")
         shutil.copyfile(tpl, img)
         mcopy(img, test, "::/root/t.py")
+        data_dir = os.path.join(os.path.dirname(test), "data")
+        if os.path.isdir(data_dir):
+            subprocess.run(["mcopy", "-s", "-o", "-i", img, data_dir, "::/root/"], check=True)
         out = os.path.join(work, "out")
         # "-d nochain" works around a QEMU bug with near jumps that wrap around
         # the end of a 16-bit code segment; see tools/qemu-run.sh.
@@ -160,8 +173,8 @@ def main():
     ap.add_argument("tests", nargs="*")
     args = ap.parse_args()
 
-    tests = args.tests or sorted(glob.glob(os.path.join(TOP, "tests/basics/*.py"))) + sorted(
-        glob.glob(os.path.join(TOP, "tests/float/*.py")))
+    tests = args.tests or [t for d in ("basics", "float", "io", "extmod")
+                           for t in sorted(glob.glob(os.path.join(TOP, "tests", d, "*.py")))]
     tests = [os.path.abspath(t) for t in tests]
     elks_img = os.environ.get("ELKS_IMG", os.path.expanduser("~/elks-qemu/hd32-fat.img"))
     mpy = os.environ.get("MPY", os.path.join(PORT_DIR, "build/micropython"))

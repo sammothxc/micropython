@@ -54,7 +54,7 @@ typedef struct _mp_obj_match_t {
     mp_obj_base_t base;
     int num_matches;
     mp_obj_t str;
-    const char *caps[0];
+    const char *caps[];
 } mp_obj_match_t;
 
 static mp_obj_t mod_re_compile(size_t n_args, const mp_obj_t *args);

@@ -13,6 +13,7 @@
 #   ELKS_IMG  bootable ELKS FAT disk image (default ~/elks-qemu/hd32-fat.img);
 #             its kernel must be built with CONFIG_EXEC_OS2
 #   MPY       MicroPython binary (default build/micropython next to this port)
+#   MPYHEAP   passed on to micropython (Python heap size in bytes)
 #   ICOUNT    set to 1 to clock QEMU by instructions executed instead of by
 #             host time.  Timings from time.ticks_ms() are then reproducible,
 #             and code takes roughly 30 to 35 times as long on a 4.77 MHz 8088.
@@ -42,7 +43,9 @@ cp "$img" "$work/hd.img"
     printf '## bootopts\nconsole=ttyS0,19200\nhma=kernel\ninit=/bin/sh\n/root/run.sh\n'
     for _ in $(seq 60); do echo '#############'; done
 } > "$work/bootopts"
-printf '/bin/micropython /root/t.py\necho "##END## $?"\n' > "$work/run.sh"
+heapenv=
+[ -n "${MPYHEAP:-}" ] && heapenv="MPYHEAP=$MPYHEAP "
+printf 'cd /root\n%s/bin/micropython /root/t.py\necho "##END## $?"\n' "$heapenv" > "$work/run.sh"
 mcopy -o -i "$work/hd.img" "$work/bootopts" ::/bootopts
 mcopy -o -i "$work/hd.img" "$work/run.sh" ::/root/run.sh
 mcopy -o -i "$work/hd.img" "$mpy" ::/bin/micropython

@@ -129,7 +129,9 @@ static void gc_setup_area(mp_state_mem_area_t *area, void *start, void *end) {
     // => T = A * (1 + BLOCKS_PER_ATB / BLOCKS_PER_FTB + BLOCKS_PER_ATB * BYTES_PER_BLOCK)
     size_t total_byte_len = (byte *)end - (byte *)start;
     #if MICROPY_ENABLE_FINALISER
-    area->gc_alloc_table_byte_len = (total_byte_len - ALLOC_TABLE_GAP_BYTE)
+    // The product is formed in mp_uint_t: where size_t is 16 bits, a heap of
+    // more than 8 KB times MP_BITS_PER_BYTE would overflow it.
+    area->gc_alloc_table_byte_len = (mp_uint_t)(total_byte_len - ALLOC_TABLE_GAP_BYTE)
         * MP_BITS_PER_BYTE
         / (
             MP_BITS_PER_BYTE

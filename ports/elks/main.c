@@ -29,6 +29,8 @@
 #include "py/stackctrl.h"
 #include "shared/readline/readline.h"
 #include "shared/runtime/pyexec.h"
+#include "extmod/vfs.h"
+#include "extmod/vfs_posix.h"
 
 #if defined(__WATCOMC__)
 #include <malloc.h>
@@ -180,6 +182,16 @@ int main(int argc, char **argv) {
     heap_init();
     mp_init();
 
+    {
+        // Mount the ELKS file system at the root of MicroPython's VFS, so
+        // open(), import and the os module see the usual paths.
+        mp_obj_t args[2];
+        args[0] = MP_OBJ_TYPE_GET_SLOT(&mp_type_vfs_posix, make_new)(&mp_type_vfs_posix, 0, 0, NULL);
+        args[1] = MP_OBJ_NEW_QSTR(MP_QSTR__slash_);
+        mp_vfs_mount(2, args, (mp_map_t *)&mp_const_empty_map);
+        MP_STATE_VM(vfs_cur) = MP_STATE_VM(vfs_mount_table);
+    }
+
     // sys.path = ["", "/lib/micropython"]; sys.argv = script and arguments.
     // The first entry is replaced below when a script file is run.
     mp_obj_list_append(mp_sys_path, mp_obj_new_str(MICROPY_ELKS_LIB_DIR, sizeof(MICROPY_ELKS_LIB_DIR) - 1));
@@ -200,8 +212,8 @@ int main(int argc, char **argv) {
         }
     }
 
-    mp_hal_stdio_mode_raw();
     if (argc == 1) {
+        mp_hal_stdio_mode_raw();
         pyexec_friendly_repl();
     } else if (strcmp(argv[1], "-c") == 0) {
         ret = execute(argv[2], 0);
@@ -229,14 +241,6 @@ void gc_collect(void) {
         gc_collect_root(&root, 1);
     }
     gc_collect_end();
-}
-
-mp_import_stat_t mp_import_stat(const char *path) {
-    struct stat st;
-    if (stat(path, &st) != 0) {
-        return MP_IMPORT_STAT_NO_EXIST;
-    }
-    return S_ISDIR(st.st_mode) ? MP_IMPORT_STAT_DIR : MP_IMPORT_STAT_FILE;
 }
 
 void nlr_jump_fail(void *val) {

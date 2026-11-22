@@ -859,7 +859,10 @@ typedef float mp_float_t;
 #elif MICROPY_FLOAT_IMPL == MICROPY_FLOAT_IMPL_DOUBLE
 #define MICROPY_PY_BUILTINS_FLOAT (1)
 #define MICROPY_FLOAT_CONST(x) x
+// A port can route the C math functions through its own wrappers.
+#ifndef MICROPY_FLOAT_C_FUN
 #define MICROPY_FLOAT_C_FUN(fun) fun
+#endif
 typedef double mp_float_t;
 #else
 #define MICROPY_PY_BUILTINS_FLOAT (0)

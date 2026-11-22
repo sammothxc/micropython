@@ -64,7 +64,7 @@ struct ByteProg
 	int bytelen;
 	int len;
 	int sub;
-	char insts[0];
+	char insts[];
 };
 
 struct Inst

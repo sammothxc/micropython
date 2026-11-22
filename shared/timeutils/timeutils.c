@@ -36,8 +36,9 @@
 
 #define LEAPOCH ((31 + 29) * 86400)
 
-#define DAYS_PER_400Y (365 * 400 + 97)
-#define DAYS_PER_100Y (365 * 100 + 24)
+// These exceed 32767, so they are long where int is 16 bits.
+#define DAYS_PER_400Y (365L * 400 + 97)
+#define DAYS_PER_100Y (365L * 100 + 24)
 #define DAYS_PER_4Y   (365 * 4 + 1)
 
 static const uint16_t days_since_jan1[] = { 0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334, 365 };

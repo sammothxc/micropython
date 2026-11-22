@@ -25,10 +25,19 @@ INC += -I. -I$(TOP) -I$(BUILD)
 SRC_C = \
 	main.c \
 	elks_mphal.c \
+	elks_compat.c \
 	elks_libm.c \
 	shared/readline/readline.c \
 	shared/runtime/pyexec.c \
+	shared/timeutils/timeutils.c \
+	extmod/modjson.c \
+	extmod/modos.c \
+	extmod/modrandom.c \
+	extmod/modre.c \
 	extmod/modtime.c \
+	extmod/vfs.c \
+	extmod/vfs_posix.c \
+	extmod/vfs_posix_file.c \
 
 SRC_QSTR += $(SRC_C)
 
@@ -60,7 +69,8 @@ export WATCOM
 export PATH := $(WATCOM)/binl64:$(WATCOM)/binl:$(PATH)
 
 ELKS_LIBC = $(ELKS)/libc/libcl.lib
-ELKS_INC = -I$(ELKS)/libc/include -I$(ELKS)/elks/include -I$(ELKS)/libc/include/watcom
+# compat/ supplies headers that the ELKS C library lacks.
+ELKS_INC = -Icompat -I$(ELKS)/libc/include -I$(ELKS)/elks/include -I$(ELKS)/libc/include/watcom
 
 # C stack and near (malloc) heap sizes; both live in the 64 KB data segment.
 # The Python heap is separate far memory, see main.c.

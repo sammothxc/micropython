@@ -1,11 +1,12 @@
 // Console input/output, Ctrl-C handling, clock and delays for the ELKS port.
 //
-// When stdin is a terminal it is switched to raw mode for the whole session,
-// so the shared readline code can do its own line editing.  Output
-// post-processing stays on, so a plain '\n' still moves to the start of the
-// next line.  Signal generation (ISIG) is turned on only while Python code
-// runs, which makes Ctrl-C raise KeyboardInterrupt; at the prompt Ctrl-C
-// arrives as an ordinary character and cancels the current line.
+// The terminal stays in its normal (cooked) mode while Python code runs, so
+// sys.stdin reads whole lines with the kernel's echo and editing, Ctrl-C
+// raises KeyboardInterrupt, and commands started by os.system() find the
+// terminal as usual.  Only while the shared readline code reads a line (the
+// REPL prompt and input()) is it switched to raw mode, so readline can do
+// its own line editing and history.  Output post-processing stays on in both
+// modes, so a plain '\n' still moves to the start of the next line.
 
 #include <errno.h>
 #include <signal.h>
@@ -19,28 +20,44 @@
 #include "shared/readline/readline.h"
 
 static struct termios orig_termios;
-static int raw_active;
+static int have_orig;       // orig_termios holds the settings at startup
+static int tty_raw;         // the terminal is in raw mode now
+static int repl_active;     // raw mode between statements (the REPL is running)
 
-void mp_hal_stdio_mode_raw(void) {
+static void tty_set_raw(int raw) {
     struct termios t;
-    if (raw_active || !isatty(0) || tcgetattr(0, &orig_termios) != 0) {
+    if (!have_orig || raw == tty_raw) {
         return;
     }
     t = orig_termios;
-    t.c_iflag &= ~(ICRNL | INLCR | IXON);
-    t.c_lflag &= ~(ICANON | ECHO | ISIG);
-    t.c_cc[VMIN] = 1;
-    t.c_cc[VTIME] = 0;
+    if (raw) {
+        t.c_iflag &= ~(ICRNL | INLCR | IXON);
+        t.c_lflag &= ~(ICANON | ECHO | ISIG);
+        t.c_cc[VMIN] = 1;
+        t.c_cc[VTIME] = 0;
+    }
     if (tcsetattr(0, TCSANOW, &t) == 0) {
-        raw_active = 1;
+        tty_raw = raw;
     }
 }
 
-void mp_hal_stdio_mode_orig(void) {
-    if (raw_active) {
-        tcsetattr(0, TCSANOW, &orig_termios);
-        raw_active = 0;
+static void tty_save(void) {
+    if (!have_orig && isatty(0) && tcgetattr(0, &orig_termios) == 0) {
+        have_orig = 1;
     }
+}
+
+// Called by main() around the interactive REPL.
+void mp_hal_stdio_mode_raw(void) {
+    tty_save();
+    repl_active = 1;
+    tty_set_raw(1);
+}
+
+// Called by main() at exit, and before exiting on a fatal error.
+void mp_hal_stdio_mode_orig(void) {
+    repl_active = 0;
+    tty_set_raw(0);
 }
 
 static void sigint_handler(int sig) {
@@ -49,23 +66,29 @@ static void sigint_handler(int sig) {
     mp_sched_keyboard_interrupt();
 }
 
+// Called with CHAR_CTRL_C before Python code runs and with -1 afterwards.
 void mp_hal_set_interrupt_char(int c) {
     if (c == CHAR_CTRL_C) {
         signal(SIGINT, sigint_handler);
+        tty_set_raw(0);
     } else {
         signal(SIGINT, SIG_IGN);
-    }
-    if (raw_active) {
-        struct termios t;
-        if (tcgetattr(0, &t) == 0) {
-            if (c == CHAR_CTRL_C) {
-                t.c_lflag |= ISIG;
-            } else {
-                t.c_lflag &= ~ISIG;
-            }
-            tcsetattr(0, TCSANOW, &t);
+        if (repl_active) {
+            tty_set_raw(1);
         }
     }
+}
+
+// input(): read a line with the shared readline code in raw mode.  Ctrl-C
+// then arrives as a character, and input() raises KeyboardInterrupt for it.
+int elks_readline(vstr_t *line, const char *prompt) {
+    int was_raw = tty_raw;
+    int ret;
+    tty_save();
+    tty_set_raw(1);
+    ret = readline(line, prompt);
+    tty_set_raw(was_raw);
+    return ret;
 }
 
 int mp_hal_stdin_rx_chr(void) {
@@ -156,4 +179,16 @@ void mp_hal_delay_ms(mp_uint_t ms) {
         ms -= 1000;
     }
     mp_hal_delay_us(ms * 1000);
+}
+
+// A seed for the random module.  The clock advances in steps of 10 ms, so a
+// counter makes seeds taken within one step differ, and the process id makes
+// programs started within one step differ.
+mp_uint_t elks_random_seed(void) {
+    static mp_uint_t count;
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    ++count;
+    return ((mp_uint_t)tv.tv_sec * 1000003UL) ^ (mp_uint_t)tv.tv_usec
+           ^ (count * 0x9e3779b9UL) ^ ((mp_uint_t)getpid() << 16);
 }
